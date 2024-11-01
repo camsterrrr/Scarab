@@ -89,6 +89,10 @@ void init_dcache_stage(uns8 proc_id, const char* name) {
   dc->sd.max_op_count = STAGE_MAX_OP_COUNT;
   dc->sd.ops          = (Op**)malloc(sizeof(Op*) * STAGE_MAX_OP_COUNT);
 
+  /* Lab 2: Use seperate cache to check conflict and capacity misses. */
+  init_cache(&dc->fully_assocaitive_cache, "Fully associative cache", DCACHE_SIZE, DCACHE_SIZE / DCACHE_LINE_SIZE, DCACHE_LINE_SIZE, sizeof(Dcache_Data), DCACHE_REPL);
+  /* Note: void init_cache(Cache* cache, const char* name, uns cache_size, uns assoc, uns line_size, uns data_size, Repl_Policy repl_policy); */
+
   /* initialize the cache structure */
   init_cache(&dc->dcache, "DCACHE", DCACHE_SIZE, DCACHE_ASSOC, DCACHE_LINE_SIZE,
              sizeof(Dcache_Data), DCACHE_REPL);
@@ -426,7 +430,20 @@ void update_dcache_stage(Stage_Data* src_sd) {
           }
 
           if(!op->off_path) {
+            /* Lab 2: Note that this condition assumes that we're using HW prefetching, which we're note, so this will never be executed. */
             STAT_EVENT(op->proc_id, DCACHE_MISS);
+            /* Lab 2: Check compulsory miss hash table for virtual address. */
+            if (!check_compulsory_miss_ht(&dc->dcache, line_addr)) {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_COMPULSORY);
+            } 
+            /* Lab 2: Check if the cache entry is in the fully associative cache. If so, then we know a conflict miss occurred. */
+            else if ((Dcache_Data*)cache_access(&dc->fully_assocaitive_cache, op->oracle_info.va, &line_addr, FALSE)) {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_CONFLICT);
+            } 
+            /* Lab 2: If not compulsory and not conflict miss, then assume capacity miss. */
+            else {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_CAPACITY);
+            }
             STAT_EVENT(op->proc_id, DCACHE_MISS_ONPATH);
             STAT_EVENT(op->proc_id, DCACHE_MISS_LD_ONPATH);
             op->oracle_info.dcmiss = TRUE;
@@ -481,7 +498,20 @@ void update_dcache_stage(Stage_Data* src_sd) {
           }
 
           if(!op->off_path) {
+            /* Lab 2: Note that this condition assumes that we're using HW prefetching, which we're note, so this will never be executed. */
             STAT_EVENT(op->proc_id, DCACHE_MISS);
+            /* Lab 2: Check compulsory miss hash table for virtual address. */
+            if (!check_compulsory_miss_ht(&dc->dcache, line_addr)) {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_COMPULSORY);
+            } 
+            /* Lab 2: Check if the cache entry is in the fully associative cache. If so, then we know a conflict miss occurred. */
+            else if ((Dcache_Data*)cache_access(&dc->fully_assocaitive_cache, op->oracle_info.va, &line_addr, FALSE)) {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_CONFLICT);
+            } 
+            /* Lab 2: If not compulsory and not conflict miss, then assume capacity miss. */
+            else {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_CAPACITY);
+            }
             STAT_EVENT(op->proc_id, DCACHE_MISS_ONPATH);
             STAT_EVENT(op->proc_id, DCACHE_MISS_LD_ONPATH);
             op->oracle_info.dcmiss = TRUE;
@@ -539,7 +569,21 @@ void update_dcache_stage(Stage_Data* src_sd) {
           }
 
           if(!op->off_path) {
+            /* Lab 2: Note that this condition assumes that we're using HW prefetching, which we're note, so this will never be executed. */
             STAT_EVENT(op->proc_id, DCACHE_MISS);
+            /* Lab 2: Check compulsory miss hash table for virtual address. */
+            if (!check_compulsory_miss_ht(&dc->dcache, line_addr)) {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_COMPULSORY);
+            } 
+            /* Lab 2: Check if the cache entry is in the fully associative cache. If so, then we know a conflict miss occurred. */
+            else if ((Dcache_Data*)cache_access(&dc->fully_assocaitive_cache, op->oracle_info.va, &line_addr, FALSE)) {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_CONFLICT);
+            } 
+            /* Lab 2: If not compulsory and not conflict miss, then assume capacity miss. */
+            else {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_CAPACITY);
+            }
+
             STAT_EVENT(op->proc_id, DCACHE_MISS_ONPATH);
             STAT_EVENT(op->proc_id, DCACHE_MISS_ST_ONPATH);
             op->oracle_info.dcmiss = TRUE;
@@ -623,8 +667,15 @@ Flag dcache_fill_line(Mem_Req* req) {
           (int)(req->addr >> LOG2(DCACHE_LINE_SIZE)), req->op_count,
           (req->op_count ? req->oldest_op_unique_num : -1));
 
+    /* Lab 2: Note that this confition assumes that HW prefetching is enabled. Knowing this, our configurations will never reach this point.*/
     data = (Dcache_Data*)cache_insert(&dc->pref_dcache, dc->proc_id, req->addr,
                                       &line_addr, &repl_line_addr);
+
+    // /* Lab 2: Check if cache entry is in the fully associative cache. If not, add the entry. */
+    if (!(Dcache_Data*)cache_access(&dc->fully_assocaitive_cache, op->oracle_info.va, &line_addr, TRUE)) {
+      (Dcache_Data*)cache_insert(&dc->fully_assocaitive_cache, dc->proc_id, req->addr, &line_addr, &repl_line_addr);
+    }
+
     ASSERT(dc->proc_id, req->emitted_cycle);
     ASSERT(dc->proc_id, cycle_count >= req->emitted_cycle);
     // mark the data as HW_prefetch if prefetch mark it as
@@ -677,6 +728,14 @@ Flag dcache_fill_line(Mem_Req* req) {
 
     data = (Dcache_Data*)cache_insert(&dc->dcache, dc->proc_id, req->addr,
                                       &line_addr, &repl_line_addr);
+    
+
+    /* Lab 2: Insert the cache entry into the fully associative cache. */
+    if ((Dcache_Data*)cache_access(&dc->fully_assocaitive_cache, op->oracle_info.va, &line_addr, TRUE) == NULL) {
+      (Dcache_Data*)cache_insert(&dc->fully_assocaitive_cache, dc->proc_id, req->addr, &line_addr, &repl_line_addr);
+    }
+
+
     DEBUG(dc->proc_id,
           "Filling dcache  off_path:%d addr:0x%s  :%7d index:%7d op_count:%d "
           "oldest:%lld\n",
