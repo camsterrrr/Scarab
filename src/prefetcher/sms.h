@@ -14,6 +14,7 @@
 #include "libs/cache_lib.h"
 #include "libs/hash_lib.h"
 #include "libs/list_lib.h"
+#include "dcache_stage.h"
 #include "op.h"
 
 /**************************************************************************************/
@@ -73,14 +74,17 @@ struct Spatial_Memory_Streaming_struct {
         // This variable is used to help maintain the 
         //  access pattern bitmap.
 
-    /* Mask variable */
-    SmsAddr offset_mask;
-        // TODO might change per cache, make dynamic, pull info from op pointer.
-        // Mask used to get the line offset. This mask is 
-        //  determined by the DCache object and varies 
-        //  depending on machine configurations.
-        // This variable is used to help maintain the 
-        //  access pattern bitmap.
+    /* References to Data Cache */
+    Dcache_Stage* dcache_stage;
+        // Maintains reference to the Data Cache stage 
+        //  maintained by Scarab. This reference will be 
+        //  to access the proccess ID field for cache 
+        //  inserts and access, and data cache fields, 
+        //  like line size and offset mask.
+        // Note that SMS is primarily focused on
+        //  prefetching data to the data cache, not
+        //  the instruction cache. So, no reference to 
+        //  the instruction cache is needed.
 
 	/* Pattern History Table */
 	SmsCache* pattern_history_table; 
@@ -174,6 +178,7 @@ Flag table_check (
     AccessPattern* ret_data
 );
 
+
 /* Filter Table */
 
 /**
@@ -194,8 +199,8 @@ Flag table_check (
  *  cache.
  * @param op Pointer to object containing metadata about the
  *  current instruction being executed.
- * @param line_addr Physical memory address. This address 
- *  could reference an instruction or it could reference data.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
  */
 void filter_table_access (
     SMS* sms, 
@@ -214,7 +219,7 @@ void filter_table_access (
  * 
  * @param filter_table Pointer to the filter table.
  * @param table_index Computed table index (PC+offset).
- * @param ret_data Pointer to cache entry data.
+ * @param ret_data Pointer to table entry data.
  */
 Flag filter_table_check (
     SmsHashTable* filter_table, 
@@ -271,7 +276,16 @@ void filter_table_update (
 /* Accumulation Table */
 
 /**
- * 
+ * The purpose of this function is to mediate any 
+ *  Accumulation Table accesses. After every L1 cache 
+ *  access, SMS checks both the Accumulation and Filter 
+ *  tables. First, the Accumulation table is indexed, then 
+ *  the Filter table. Accessing and indexing the filter 
+ *  table needs to be fast. This function mediates 
+ *  the three main functions of the Accumulation table. 
+ *  Given the circumstances of the current cache access 
+ *  we check several conditions. When a is met a function 
+ *  is called to handle the condition.
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
@@ -280,8 +294,8 @@ void filter_table_update (
  *  cache.
  * @param op Pointer to object containing metadata about the
  *  current instruction being executed.
- * @param line_addr Physical memory address. This address 
- *  could reference an instruction or it could reference data.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
  */
 void accumulation_table_access (
     SMS* sms, 
@@ -291,7 +305,17 @@ void accumulation_table_access (
 );
 
 /**
+ * The purpose of this function is to check if a pc+offset
+ *  address exists in the accumulation table. If entry 
+ *  exists, ret_data will store a pointer to the cache 
+ *  entry's data. If an entry doesn't exist, the returned 
+ *  flag will be used to call the "filter_table_insert" 
+ *  function to allocate an entry in the Filter Table.
  * 
+ * @param accumulation_table Pointer to the accumulation
+ *  table.
+ * @param table_index Computed table index (PC+offset).
+ * @param ret_data Pointer to table entry data.
  */
 Flag accumulation_table_check (
     SmsHashTable* accumulation_table, 
@@ -300,7 +324,17 @@ Flag accumulation_table_check (
 );
 
 /**
+ * The purpose of this function is to inset a new entry 
+ *  to the Accumulation Table. This function will only be 
+ *  called if "accumulation_table_check" returns false. 
+ *  If this function is called, we can assume an entry
+ *  doesn't exist in the Accumulation Table.
  * 
+ * @param accumulation_table Pointer to the Accumulation
+ *  Table.
+ * @param table_index Computed table index (PC+offset).
+ * @param line_addr_access_pattern  Current access 
+ *  pattern of the region.
  */
 void accumulation_table_insert (
     SmsHashTable* accumulation_table,
@@ -310,7 +344,19 @@ void accumulation_table_insert (
 );
 
 /**
+ * The purpose of this function is to check if the 
+ *  Accumulation Table entry needs its access pattern 
+ *  updated.
  * 
+ * @param accumulation_table Pointer to the accumulation 
+ *  table.
+ * @param table_index Computed table index (PC+offset).
+ * @param line_addr_access_pattern  Current access 
+ *  pattern of the region.
+ * @param memory_region_access_pattern Updated access 
+ *  pattern of the region.
+ * @param ret_data Pointer to the Accumulation Table
+ *  entry's data.
  */
 void accumulation_table_update (
     SmsHashTable* accumulation_table, 
@@ -321,18 +367,87 @@ void accumulation_table_update (
 );
 
 /**
+ * The purpose of this function is to transfer an 
+ *  entry from the Accumulation Table to the Pattern 
+ *  History Table after some interval has passed. The
+ *  SMS design states that entries should not be
+ *  transferred until an interval has passed. This 
+ *  interval identifies the predicted time in which 
+ *  the cache entries must be stored in the data 
+ *  cache. This is interval is used to ensure cache 
+ *  entries aren't evicted before they're needed.
  * 
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param table_index Computed table index (PC+offset).
  */
-Flag accumulation_table_transfer ();
+void accumulation_table_transfer (
+    SMS* sms, 
+    TableIndex table_index
+);
 
 
 /* Pattern History Table */
 
-Flag pattern_history_table_lookup ();
+/**
+ * Todo: Not sure what this will do quite yet...
+ */
+void pattern_history_table_access (
+    SMS* sms
+);
+
+/**
+ * The purpose of this function is to insert a entry 
+ *  from the Accumulation Table to the Pattern History
+ *  Table. The Pattern History Table is set-associative,
+ *  so if the set is full, an entry will be evicted.
+ * 
+ * @param pattern_history_table Pointer to cache object.
+ * @param dcache_stage Pointer to object maintaining 
+ *  references for useful data cache stage and data cache 
+ * metadata.
+ * @param table_index Computed table index (PC+offset).
+ * @param memory_region_access_pattern Access pattern of 
+ *  the region.
+ */
+void pattern_history_table_insert (
+    Cache* pattern_history_table,
+    Dcache_Stage* dcache_stage,
+    TableIndex table_index, // Assume this is calculated by caller.
+    AccessPattern memory_region_access_pattern
+);
+
+/**
+ * The purpose of this function is to handle a Pattern 
+ *  History Table lookup when a trigger access occurs. 
+ *  If an entry exists, stream the predicted regions 
+ *  identified by each set to data cache. In the end, 
+ *  allocate an entry in the filter table to begin 
+ *  tracking this new interval's access patterns.
+ * 
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param cache Pointer to object maintaining the L1 cache
+ *  we're accessing. It could be a data or an instruction 
+ *  cache.
+ * @param op Pointer to object containing metadata about the
+ *  current instruction being executed.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
+ */
+void pattern_history_table_lookup (
+    SMS* sms, 
+    Cache* cache,
+    Op* op,
+    Addr line_addr
+);
 
 
 /* Prediction Register */
 
+/**
+ * Todo: Not sure what this will do quite yet...
+ */
 void prediction_register_prefetch ();
 
 

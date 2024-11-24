@@ -240,7 +240,7 @@ void accumulation_table_insert (
     Flag* new_entry;
 
     //1.Create new key-value mapping in the accumulation
-        //  table.
+    //  table.
     AccessPattern* data_ptr_for_accumulation_table_entry =
             (AccessPattern*) hash_table_access_create (
                 accumulation_table, table_index, new_entry
@@ -283,16 +283,96 @@ void accumulation_table_update (
 }
 
 void accumulation_table_transfer (
-
+    SMS* sms, 
+    TableIndex table_index
 ) {
+    SmsHashTable* accumulation_table = (*sms).accumulation_table;
+    AccessPattern* ret_data;
 
+    // 1. Check that the table index exists in the
+    //  Accumulation Table.
+    Flag flag = accumulation_table_check(
+        accumulation_table,
+        table_index,
+        ret_data
+    );
+
+    // 2a. If entry doesn't exist in Accumulation Table, 
+    //  then do nothing.
+    if (!flag) { return; }
+
+    // 2b. Add entry to the Pattern History Table.
+    pattern_history_table_insert(
+        (*sms).pattern_history_table,
+        (*sms).dcache_stage,
+        table_index,
+        *ret_data
+    );
+
+    // 3. Delete the entry from the Accumulation Table.
+    hash_table_access_delete(accumulation_table, table_index);
+
+    return;
 }
 
 
 /* Pattern History Table */
 
+void pattern_history_table_access (
+    SMS* sms
+) {
+    SmsCache pht = (*sms).pattern_history_table;
+
+    // TODO
+
+    return;
+}
+
+void pattern_history_table_insert (
+    Cache* pattern_history_table,
+    Dcache_Stage* dcache_stage,
+    TableIndex table_index, // Assume this is calculated by caller.
+    AccessPattern memory_region_access_pattern
+) {
+
+    // 1. Allocate heap memory to store access pattern. 
+    //  The cache_entry struct defines the data as an
+    //  arbitrary pointer. Store on heap so this data
+    //  is referenced long after this function ends.
+    AccessPattern *new_entry_access_pattern = (AccessPattern*) malloc(sizeof(AccessPattern)); 
+    *new_entry_access_pattern = memory_region_access_pattern;
+
+    // 2. Index cache to insert the access pattern in the 
+    //  correct set.
+    AccessPattern *evicted_entry_access_pattern = NULL; 
+            // Pointer to cache entry that is getting replaced.
+    cache_insert(
+        pattern_history_table,
+        (*dcache_stage).proc_id, 
+            // Identifies the processor ID for a multi-core CPU.
+        table_index, 
+        new_entry_access_pattern,
+        evicted_entry_access_pattern
+    );
+
+    // 3. Check if the line we just replaced has the same data.
+    //  This will be used for a graph in our final lab report.
+    if (evicted_entry_access_pattern != NULL) {
+        if (*new_entry_access_pattern == *evicted_entry_access_pattern) { 
+            // Todo: Increment counters
+        }
+        else { 
+            // Todo: Increment counters
+        }
+    }
+
+
+    return;
+}
+
 void pattern_history_table_lookup (
     SMS* sms, 
+    Cache* cache,
     Op* op,
     Addr line_addr
 ) {
