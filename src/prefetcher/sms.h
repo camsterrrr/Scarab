@@ -66,14 +66,6 @@ struct SmsPredictionRegister {
  */
 struct Spatial_Memory_Streaming_struct {
 
-    /* Cache line size */
-    uns64 line_size; 
-        // TODO might change per cache, make dynamic, pull info from op pointer.
-        // Size of cache entries in bytes. If a cache entry 
-        //  is 64 bytes in size, this value will be 64.
-        // This variable is used to help maintain the 
-        //  access pattern bitmap.
-
     /* References to Data Cache */
     Dcache_Stage* dcache_stage;
         // Maintains reference to the Data Cache stage 
@@ -161,6 +153,14 @@ struct Spatial_Memory_Streaming_struct {
 /* Helper Functions */
 
 /**
+ * 
+ */
+//! Todo: not sure how to stream blocks.
+void sms_stream_blocks_to_data_cache (
+
+);
+
+/**
  * This helper function is used to check if a table index 
  *  exists in a specified hash table. This function returns
  *  True if the entry does exist and False if it doesn't.
@@ -194,9 +194,8 @@ Flag table_check (
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
- * @param cache Pointer to object maintaining the L1 cache
- *  we're accessing. It could be a data or an instruction 
- *  cache.
+ * @param cache Pointer to object maintaining the L1 data 
+ *  cache, used to quickly access metadata. 
  * @param op Pointer to object containing metadata about the
  *  current instruction being executed.
  * @param line_addr Physical memory address. This physical 
@@ -289,9 +288,8 @@ void filter_table_update (
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
- * @param cache Pointer to object maintaining the L1 cache
- *  we're accessing. It could be a data or an instruction 
- *  cache.
+ * @param cache Pointer to object maintaining the L1 data 
+ *  cache, used to quickly access metadata. 
  * @param op Pointer to object containing metadata about the
  *  current instruction being executed.
  * @param line_addr Physical memory address. This physical 
@@ -390,7 +388,7 @@ void accumulation_table_transfer (
 /* Pattern History Table */
 
 /**
- * Todo: Not sure what this will do quite yet...
+ * ! Todo: Not sure what this will do quite yet...
  */
 void pattern_history_table_access (
     SMS* sms
@@ -421,15 +419,12 @@ void pattern_history_table_insert (
  * The purpose of this function is to handle a Pattern 
  *  History Table lookup when a trigger access occurs. 
  *  If an entry exists, stream the predicted regions 
- *  identified by each set to data cache. In the end, 
- *  allocate an entry in the filter table to begin 
+ *  identified by each set entry to data cache. In the 
+ *  end, allocate an entry in the filter table to begin 
  *  tracking this new interval's access patterns.
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
- * @param cache Pointer to object maintaining the L1 cache
- *  we're accessing. It could be a data or an instruction 
- *  cache.
  * @param op Pointer to object containing metadata about the
  *  current instruction being executed.
  * @param line_addr Physical memory address. This physical 
@@ -437,7 +432,6 @@ void pattern_history_table_insert (
  */
 void pattern_history_table_lookup (
     SMS* sms, 
-    Cache* cache,
     Op* op,
     Addr line_addr
 );
@@ -446,7 +440,7 @@ void pattern_history_table_lookup (
 /* Prediction Register */
 
 /**
- * Todo: Not sure what this will do quite yet...
+ * ! Todo: Not sure what this will do quite yet...
  */
 void prediction_register_prefetch ();
 

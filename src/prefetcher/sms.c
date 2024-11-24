@@ -49,14 +49,16 @@ void filter_table_access (
 	AccessPattern memory_region_access_pattern;
     /* Offset variables */
     SmsAddr line_addr_offset_bits = line_addr & cache_offset_mask; 
-    /* Instruction access pattern - reveals blocks accessed by line_data */
+    /* Instruction access pattern - reveals blocks accessed 
+        by line_data */
     uns64 line_addr_access_pattern = line_addr_offset_bits / cache_line_size; 
     /* Current program counter (PC) reference */
     Addr pc = op->inst_info->addr;
     /* Index variable - used to index tables */
     TableIndex table_index = pc + line_addr_offset_bits; 
         // Paper describes this as the best indexing method.
-        // Todo: if there's time, maybe dynamically determine indexing method.
+        //! Todo: if there's time, maybe dynamically 
+        //! determine indexing method.
 
     // 1. Check if memory region is already in the Filter Table.
     AccessPattern* ret_line_data = NULL;
@@ -120,7 +122,8 @@ void filter_table_insert (
     // 2. Store the access pattern in the Filter Table.
     *data_for_filter_table_insert = line_addr_access_pattern;
 
-    // Todo: Throw in flag check? Or, just assume that it's not in table?
+    //? Throw in flag check? Or, just assume that 
+    //? it's not in table?
 
     return;
 }
@@ -178,14 +181,16 @@ void accumulation_table_access (
 	AccessPattern memory_region_access_pattern;
     /* Offset variables */
     SmsAddr line_addr_offset_bits = line_addr & cache_offset_mask; 
-    /* Instruction access pattern - reveals blocks accessed by line_data */
+    /* Instruction access pattern - reveals blocks accessed 
+        by line_data */
     uns64 line_addr_access_pattern = line_addr_offset_bits / cache_line_size; 
     /* Current program counter (PC) reference */
     Addr pc = op->inst_info->addr;
     /* Index variable - used to index tables */
     TableIndex table_index = pc + line_addr_offset_bits; 
         // Paper describes this as the best indexing method.
-        // Todo: if there's time, maybe dynamically determine indexing method.
+        //! Todo: if there's time, maybe dynamically 
+        //! determine indexing method.
 
     // 1. Check if memory region is already in the Accumulation
     //   Table.
@@ -239,8 +244,8 @@ void accumulation_table_insert (
 ) {
     Flag* new_entry;
 
-    //1.Create new key-value mapping in the accumulation
-    //  table.
+    //1.Create new key-value mapping in the Accumulation
+    //  Table.
     AccessPattern* data_ptr_for_accumulation_table_entry =
             (AccessPattern*) hash_table_access_create (
                 accumulation_table, table_index, new_entry
@@ -250,7 +255,7 @@ void accumulation_table_insert (
     line_addr_access_pattern |= memory_region_access_pattern;
 
     //3.Store the access pattern in the Accumulation
-    //Table
+    //  Table
     *data_ptr_for_accumulation_table_entry = line_addr_access_pattern;
 
     return;
@@ -277,7 +282,8 @@ void accumulation_table_update (
         *ret_data = line_addr_access_pattern;
     }
 
-    // 2. Else, the same region has been accessed. Therefore, do nothing.
+    // 2. Else, the same region has been accessed. 
+    //  Therefore, do nothing.
 
     return;
 }
@@ -323,7 +329,7 @@ void pattern_history_table_access (
 ) {
     SmsCache pht = (*sms).pattern_history_table;
 
-    // TODO
+    //! Todo: Write function logic.
 
     return;
 }
@@ -331,7 +337,8 @@ void pattern_history_table_access (
 void pattern_history_table_insert (
     Cache* pattern_history_table,
     Dcache_Stage* dcache_stage,
-    TableIndex table_index, // Assume this is calculated by caller.
+    TableIndex table_index, 
+        // Assume this is calculated by caller.
     AccessPattern memory_region_access_pattern
 ) {
 
@@ -359,10 +366,10 @@ void pattern_history_table_insert (
     //  This will be used for a graph in our final lab report.
     if (evicted_entry_access_pattern != NULL) {
         if (*new_entry_access_pattern == *evicted_entry_access_pattern) { 
-            // Todo: Increment counters
+            //! Todo: Increment counters
         }
         else { 
-            // Todo: Increment counters
+            //! Todo: Increment counters
         }
     }
 
@@ -372,38 +379,88 @@ void pattern_history_table_insert (
 
 void pattern_history_table_lookup (
     SMS* sms, 
-    Cache* cache,
     Op* op,
     Addr line_addr
 ) {
-
-    // Todo: Incorporate dynamic variabvle for line size and offset bits. Different per cache, can't be static. op would have reference to cache.
-    // Todo: Maintain reference to cache, if not defined in op.
-
     /* Table references */
 	SmsCache* pattern_history_table = (*sms).pattern_history_table;
+    SmsCache* dcache =(*(*sms).dcache_stage).dcache;
     /* Offset variables */
-    SmsAddr line_addr_offset_bits = line_addr & (*sms).offset_mask; // Todo make variable, pass in cache reference as param
+    SmsAddr line_addr_offset_bits = line_addr & (*dcache).offset_mask; 
     /* Current program counter (PC) reference */
     Addr pc = op->inst_info->addr;
     /* Index variable - used to index tables */
     TableIndex table_index = pc + line_addr_offset_bits; 
-        // Paper describes this as the best indexing method.
-        // Todo: if there's time, maybe dynamically determine indexing method.
+        // Paper describes pc+offset as the best indexing 
+        //  method.
+        //! Todo (optional): If there's time, let user set the 
+        //! indexing method.
 
-    // 1. Check if entry exists for this table index.
-    AccessPattern* blocks_to_stream;
-    cache_access( );
+    /* Maintain reference to all valid Pattern History 
+        Table entries */
+    AccessPattern** set_entries_access_patterns = 
+        (AccessPattern**) malloc ((*dcache).assoc * sizeof(AccessPattern*));
+        // The Pattern History Table is set-associative, 
+        //  meaning there is a static number of entries per
+        //  tag. If the Pattern History Table's 
+        //  associativity is 4, then this array will
+        //  maintain references to 4 access pattern pointers.
 
-    // 2a. If entry exists, stream accessed regions to .
-    // Todo: not sure how to stream blocks.
+    // 1. Store valid cache entries in the access pattern 
+    //  array.
+    uns used_elements = 0;
 
-    // 2b. If entry doesn't exist, do nothing.
-    // Todo: Is this correct?
+    //? Do I need to call cache_access? Or is checking
+    //? the valid bit good enough?
+    for (int i = 0; i < (*dcache).assoc; i++) {
+        Cache_Entry *cache_entry = (*pattern_history_table).entries[table_index][i];
+            //? Todo: How to enable table_index lookup, 
+            //? instead of set lookup?
+            //! Todo: Review this question with TA.
+
+        if (
+            (*cache_entry).tag == table_index
+            && (*cache_entry).valid == 1
+        ) {
+            (*cache_entry).last_access_time = sim_time;
+            set_entries_access_patterns[i] = (*cache_entry).data;
+            used_elements++;
+        } else {
+            set_entries_access_patterns[i] = NULL;
+        }
+    }
+
+    // End function early if there are no valid cache 
+    //  entries.
+    if (used_elements == 0) { return; }
+
+    // 2. Merge all access patterns to a single variable.
+    AccessPattern set_merged_access_pattern = 0;
+    for (int i = 0; i < (*dcache).assoc; i++) { //? i < used_elements
+        if (set_entries_access_patterns[i] != NULL) {
+            set_merged_access_pattern |= *(set_entries_access_patterns[i]);
+        }
+    }
+
+    // 3. Stream all regions indicated in access pattern 
+    //  to the data cache.
+    sms_stream_blocks_to_data_cache (
+        table_index,
+        set_merged_access_pattern
+    );
     
-    // 3. Add entry to the Filter Table. This happens 
-    //  no matter what. We want to track all accesses 
-    // to filter table.
+    // 4. Add entry to the Filter Table. This happens 
+    //  no matter what. We want to track this new 
+    //  interval's access pattern.
+
+    //! Todo (Optional): Instead call this logic at each 
+    //! data cache access occurrence (in dcache_stage.c)?
+    filter_table_access(
+        sms, 
+        dcache, 
+        op, 
+        line_addr
+    );
 
     return;
 }
