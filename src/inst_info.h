@@ -82,7 +82,7 @@ typedef struct Trace_Info_struct {
 // static instruction (eg. address).
 // typedef in globals/global_types.h
 struct Inst_Info_struct {
-  Addr addr;         // address of the instruction
+  Addr addr;         // address of the instruction (program counter//pc)
   uns  uop_seq_num;  // static op num used to differentiate ops with same pc
   Table_Info* table_info;  // pointer into the table of static instruction
                            // information
