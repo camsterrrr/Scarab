@@ -149,6 +149,22 @@ struct Spatial_Memory_Streaming_struct {
 
 /* Initialization Functions */
 
+SMS* sms_init (
+    Dcache_Stage* dcache_stage
+);
+
+void accumulation_table_init (
+    SmsHashTable* accumulation_table
+);
+
+void filter_table_init (
+    SmsHashTable* filter_table
+);
+
+void pattern_history_table_init (
+    SmsCache* pattern_history_table
+);
+
 
 /* Helper Functions */
 

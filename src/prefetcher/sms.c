@@ -13,9 +13,103 @@
 /**************************************************************************************/
 
 /* Initialize Structures */
-void filter_table_init (SmsHashTable* filter_table);
-void accumulation_table_init (SmsHashTable* accumulation_table);
-void pattern_history_table_init (SmsCache*);
+
+SMS* sms_init (
+    Dcache_Stage* dcache_stage
+) {
+    SMS* sms = (SMS*) malloc(sizeof(SMS));
+    (*sms).dcache_stage = dcache_stage;
+    (*sms).accumulation_table = (SmsHashTable*) malloc(sizeof(SmsHashTable));
+    (*sms).filter_table = (SmsHashTable*) malloc(sizeof(SmsHashTable));
+    (*sms).pattern_history_table = (SmsCache*) malloc(sizeof(SmsCache));
+    
+    accumulation_table_init (
+        (*sms).accumulation_table
+    );
+    filter_table_init (
+        (*sms).filter_tabl
+    );
+    pattern_history_table_init (
+        (*sms).pattern_history_table
+    );
+
+    return;
+}
+
+void accumulation_table_init (
+    SmsHashTable* accumulation_table
+) {
+    init_hash_table(
+        accumulation_table, 
+        "SMS Accumulation Table", 
+        64,
+            // SMS results recommend limiting the Accumulation
+            //  Table to 64 entries. No application in their 
+            //  testing used more than 64 entries.
+        sizeof(AccessPattern)
+    );
+
+    return;
+}
+
+void filter_table_init (
+    SmsHashTable* filter_table
+) {
+    init_hash_table(
+        filter_table, 
+        "SMS Filter Table", 
+        32, 
+            // SMS results recommend limiting the Filter 
+            //  Table to 32 entries. No application in their 
+            //  testing used more than 32 entries.
+        sizeof(AccessPattern)
+    );
+
+    return;
+}
+
+void pattern_history_table_init (
+    SmsCache* pattern_history_table
+) {
+    init_cache(
+        pattern_history_table, 
+        "SMS Pattern History Table", 
+        16384, 
+            // This declares the number of entries in
+            //  the Pattern History Table. The SMS Results
+            //  discuss 16K entries as limit before there
+            //  is no gain in coverage.
+        4,
+            // SMS Results doesn't discuss the Pattern 
+            //  History Table's recommended associativity. 
+            //  We chose 4 as an arbitrary value.
+        2048,
+            // This declares line size, which determines 
+            //  how much data is referenced by a single 
+            //  cache entry. For our SMS implementation,
+            //  this line size represents the size of 
+            //  each region. SMS Results described 2KB
+            //  being the optimal Spatial Region Size.
+            //  The size of each line determines how many
+            //  offset bits there are in a line address.
+            // Ex. A line size of 2KB means each PHT 
+            //  entry tracks memory access for a 2KB 
+            //  region.
+        sizeof(AccessPattern), 
+            // This declares the data size, which 
+            //  determines the number of bits to allocate 
+            //  for a cache entry's data.
+            // Each cache entry will store a bit map that 
+            //  identifies the access pattern of that 
+            //  region of memory.
+        REPL_LRU_REF
+            // This declares that the cache is going to
+            //  be maintained by the LRU replacement 
+            //  policy.
+    );
+
+    return;
+}
 
 /* Filter Table */
 Flag table_check (
