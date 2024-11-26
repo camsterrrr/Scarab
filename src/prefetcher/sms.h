@@ -177,6 +177,44 @@ void sms_stream_blocks_to_data_cache (
 );
 
 /**
+ * This function calculates the index value used to search
+ *  the Filter and Accumulaton Table. For now, it just 
+ *  calculates the pc + line address offset bits, as this
+ *  was the method the SMS results described as being the
+ *  optimal.
+ * 
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param op Pointer to object containing metadata about the
+ *  current instruction being executed.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
+ */
+TableIndex get_table_index (
+    SMS* sms,
+    Op* op,
+    Addr line_addr
+);
+
+/**
+ * This function takes a line a address and isolates the 
+ *  offset bits. Once the offset bits have been isolated,
+ *  it identifies the cache block being access by dividing
+ *  the offset bits with the dcache line size. This 
+ *  indicates the block in the spatial memory region being 
+ *  accessed.
+ * 
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
+ */
+AccessPattern line_address_access_pattern (
+    SMS* sms,
+    Addr line_addr
+);
+
+/**
  * This helper function is used to check if a table index 
  *  exists in a specified hash table. This function returns
  *  True if the entry does exist and False if it doesn't.
@@ -194,7 +232,6 @@ Flag table_check (
     AccessPattern* ret_data
 );
 
-
 /* Filter Table */
 
 /**
@@ -210,16 +247,13 @@ Flag table_check (
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
- * @param cache Pointer to object maintaining the L1 data 
- *  cache, used to quickly access metadata. 
  * @param op Pointer to object containing metadata about the
  *  current instruction being executed.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
 void filter_table_access (
-    SMS* sms, 
-    Cache* cache,
+    SMS* sms,
     Op* op,
     Addr line_addr
 );

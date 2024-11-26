@@ -12,6 +12,7 @@
 /* Function definitions */
 /**************************************************************************************/
 
+
 /* Initialize Structures */
 
 SMS* sms_init (
@@ -108,10 +109,99 @@ void pattern_history_table_init (
             //  policy.
     );
 
+    /**
+     * Offset bits: 11
+     * Index bits: 12
+     * Tag bits = 41
+     * Address width = 64
+     * Associativity = 4
+     * # of entries = 16384
+     * # of sets = 4096
+     * Block size = 2048
+     */
+
     return;
 }
 
+
+/* Helper functions */
+
+TableIndex get_table_index (
+    SMS* sms,
+    Op* op,
+    Addr line_addr
+) {
+    Addr pc = (*(*op).inst_info).addr; // program counter (PC)
+    Mask cache_offset_mask = (*(*sms).dcache).offset_mask;
+    SmsAddr line_addr_offset_bits = line_addr & cache_offset_mask; 
+
+
+    /* Index variable - used to index tables */
+    return pc + line_addr_offset_bits; 
+        // SMS results discuss this as being the most 
+        //  effective strategy to index the SMS tables.
+        //! Todo: if there's time, maybe dynamically 
+        //! determine indexing method.
+}
+
+AccessPattern line_address_access_pattern (
+    SMS* sms,
+    Addr line_addr
+) {
+    uns64 spatial_region_size = (*(*sms).pattern_history_table).line_size;
+        // SMS results section recommends this value to be 
+        //  2048KB (16384b).
+    uns64 cache_line_size = (*(*sms).dcache).line_size;
+        // default Scarab value is 64b.
+    uns64 access_pattern_upper_limit = spatial_region_size / cache_line_size;
+        // 16384/64 = 256. Meaning
+    Mask cache_offset_mask = (*(*sms).dcache).offset_mask;
+    SmsAddr line_addr_offset_bits = line_addr & cache_offset_mask; 
+
+    // Remember an Access Pattern (spatial pattern) is just
+    //  a bit map identifying which cache blocks ahve been 
+    //  accessed. Don't think of this as a number... Again,
+    //  its a bit map.
+
+    // 1. Compute the cache block index.
+    AccessPattern block_index = (
+        line_addr_offset_bits / cache_line_size
+            // Scarab's default line size is 64b, so think
+            //  of this line as being o-bits / 64. This 
+            //  operation defines the block being accessed.
+            // For instance, if offset bits is 63, then
+            //  63/64 = 0, so we're accessing the first 
+            //  memory region. 64/64 means we're accessing
+            //  the second region, and so on.
+    );
+
+    // 2. Set the bit for the accessed block.
+    AccessPattern line_addr_access_pattern = 0;
+    if (block_index < access_pattern_upper_limit) {
+        line_addr_access_pattern |= (1ULL << block_index);//? Is this bit shifting logic correct?
+            // Example: 64/64 represented as an integer is
+            //  00...1 (1), but as a bit map it should 
+            //  represent 00...10 (access second region).
+            // Example: 63/64 represented as an integer is
+            //  00...0 (0), but as a bit map it should 
+            //  represent 00...1 (access first region).
+    }
+
+    else {
+        // Something went wrong.
+        //! Todo: Add stat counter.
+    }
+
+    if (block_index == 0) {
+        //! Todo: Add stat counter here.
+    }
+
+    return line_addr_access_pattern;
+}
+
+
 /* Filter Table */
+
 Flag table_check (
     SmsHashTable* table, 
     TableIndex table_index, 
@@ -129,30 +219,25 @@ Flag table_check (
 }
 
 void filter_table_access (
-    SMS* sms, 
-    Cache* cache,
+    SMS* sms,
     Op* op,
     Addr line_addr
 ) {
-    /* Table references */
-	SmsHashTable* accumulation_table = (*sms).accumulation_table;
+    /* Filter Table reference */
     SmsHashTable* filter_table = (*sms).filter_table;
-    uns64 cache_line_size = (*cache).line_size;
-    Mask cache_offset_mask = (*cache).offset_mask;
-    /* Metadata for check, insertion, and update */
-	AccessPattern memory_region_access_pattern;
-    /* Offset variables */
-    SmsAddr line_addr_offset_bits = line_addr & cache_offset_mask; 
     /* Instruction access pattern - reveals blocks accessed 
         by line_data */
-    uns64 line_addr_access_pattern = line_addr_offset_bits / cache_line_size; 
-    /* Current program counter (PC) reference */
-    Addr pc = op->inst_info->addr;
-    /* Index variable - used to index tables */
-    TableIndex table_index = pc + line_addr_offset_bits; 
-        // Paper describes this as the best indexing method.
-        //! Todo: if there's time, maybe dynamically 
-        //! determine indexing method.
+    AccessPattern line_addr_access_pattern = line_address_access_pattern (
+                                                sms,
+                                                line_addr
+                                            ); 
+    
+    TableIndex table_index = get_table_index (
+                                sms,
+                                op,
+                                line_addr
+                            );
+        // pc + line address offset bits
 
     // 1. Check if memory region is already in the Filter Table.
     AccessPattern* ret_line_data = NULL;
@@ -165,6 +250,13 @@ void filter_table_access (
 	// 2a. If memory region does not exist in filter table, 
     //	then create a new table entry.
 	if (flag == FALSE) {
+        DEBUG(
+            "SMS Filter Table access: "
+            "Table index %s does not exist in the Filter Table. "
+            "Allocating new entry...",
+            hexstr64s(table_index);
+        );
+
         filter_table_insert (
             filter_table, 
             table_index, 
@@ -176,12 +268,19 @@ void filter_table_access (
     //	check access pattern and transfer to accumulation
     //  table if needed.
 	else {
-        memory_region_access_pattern = *ret_line_data;
+        DEBUG(
+            "SMS Filter Table access: "
+            "Table index %s exists in the Filter Table. "
+            "Checking if unique access pattern occurred...",
+            hexstr64s(table_index);
+        );
+
+        AccessPattern memory_region_access_pattern = *ret_line_data;
             // Dereference returned data for storing.
 
         filter_table_update(
             filter_table,
-            accumulation_table,
+            (*sms).accumulation_table,
             table_index,
             line_addr_access_pattern,
             memory_region_access_pattern
@@ -206,6 +305,10 @@ void filter_table_insert (
     TableIndex table_index, 
     AccessPattern line_addr_access_pattern
 ) {
+    // Note that in filter_table_access we checked to see 
+    //  if a entry already existed. If this function is 
+    //  called we can assume that an entry doesn't exist.
+
     // 1. Create new key-value mapping in the Filter table.
     Flag* new_entry;
     AccessPattern* data_for_filter_table_insert = 
@@ -215,9 +318,6 @@ void filter_table_insert (
 
     // 2. Store the access pattern in the Filter Table.
     *data_for_filter_table_insert = line_addr_access_pattern;
-
-    //? Throw in flag check? Or, just assume that 
-    //? it's not in table?
 
     return;
 }
@@ -237,6 +337,12 @@ void filter_table_update (
         (line_addr_access_pattern | memory_region_access_pattern) 
             != memory_region_access_pattern
     ) {
+        DEBUG(
+            "Table index %s was accessed in the Filter Table "
+            "in a unique region. Now transferring entry to "
+            "the Accumulation Table...",
+            hexstr64s(table_index);
+        );
         // Region has been uniquely accessed twice now!
 
         // 2a. Create new key-value mapping in the accumulation
@@ -253,6 +359,13 @@ void filter_table_update (
     }
 
     // 3. Else, the same region has been accessed. Therefore, do nothing.
+    DEBUG(
+        "SMS Filter Table update: "
+        "Table index %s was accessed in the Filter Table "
+        "in the same region. It will remain in the Filter "
+        "Table...",
+        hexstr64s(table_index);
+    );
     
     return;
 }
@@ -268,23 +381,19 @@ void accumulation_table_access (
 ) {
     /* Table references */
 	SmsHashTable* accumulation_table = (*sms).accumulation_table;
-    SmsHashTable* filter_table = (*sms).filter_table;
-    uns64 cache_line_size = (*cache).line_size;
-    Mask cache_offset_mask = (*cache).offset_mask;
-    /* Metadata for check, insertion, and update */
-	AccessPattern memory_region_access_pattern;
-    /* Offset variables */
-    SmsAddr line_addr_offset_bits = line_addr & cache_offset_mask; 
     /* Instruction access pattern - reveals blocks accessed 
         by line_data */
-    uns64 line_addr_access_pattern = line_addr_offset_bits / cache_line_size; 
-    /* Current program counter (PC) reference */
-    Addr pc = op->inst_info->addr;
-    /* Index variable - used to index tables */
-    TableIndex table_index = pc + line_addr_offset_bits; 
-        // Paper describes this as the best indexing method.
-        //! Todo: if there's time, maybe dynamically 
-        //! determine indexing method.
+    AccessPattern line_addr_access_pattern = line_address_access_pattern (
+                                                sms,
+                                                line_addr
+                                            ); 
+    
+    TableIndex table_index = get_table_index (
+                                sms,
+                                op,
+                                line_addr
+                            );
+        // pc + line address offset bits
 
     // 1. Check if memory region is already in the Accumulation
     //   Table.
@@ -298,13 +407,23 @@ void accumulation_table_access (
 	// 2a. If memory region does not exist in Accumulation
     //  Table, then search the Filter Table.
 	if (flag == FALSE) {
-        filter_table_access(sms, op, line_addr);
+        DEBUG(
+            "SMS Accumulation Table access: "
+            "Table index %s was not found in the Accumulation "
+            "Table. Now checking the filter table...",
+            hexstr64s(table_index);
+        );
+        filter_table_access(
+            sms, 
+            op, 
+            line_addr
+        );
 	}
 
 	// 2b. If entry does exist in accumulation table, then
     //  update the access pattern.
 	else {
-        memory_region_access_pattern = *ret_line_data;
+        AccessPattern memory_region_access_pattern = *ret_line_data;
             // Note ret_line_data is a pointer to the 
             //  Accumulation Table's entry.
 
@@ -352,6 +471,13 @@ void accumulation_table_insert (
     //  Table
     *data_ptr_for_accumulation_table_entry = line_addr_access_pattern;
 
+    DEBUG(
+        "SMS Accumulation Table insert: "
+        "Table index %s was successfully inserted "
+        "into the Accumulation Table!",
+        hexstr64s(table_index);
+    );
+
     return;
 }
 
@@ -368,6 +494,12 @@ void accumulation_table_update (
         (line_addr_access_pattern | memory_region_access_pattern) 
             != memory_region_access_pattern
     ) {
+        DEBUG(
+            "SMS Accumulation Table update: "
+            "Table index %s was found in the Accumulation "
+            "Table. Access pattern has been updated!",
+            hexstr64s(table_index)
+        );
         // 1a. Update access pattern.
         line_addr_access_pattern |= memory_region_access_pattern;
 
@@ -399,7 +531,16 @@ void accumulation_table_transfer (
 
     // 2a. If entry doesn't exist in Accumulation Table, 
     //  then do nothing.
-    if (!flag) { return; }
+    if (!flag) { 
+        DEBUG(
+            "SMS Accumulation Table transfer: "
+            "Table index %s was not found in the Accumulation "
+            "Table.",
+            hexstr64s(table_index)
+        );
+
+        return; 
+    }
 
     // 2b. Add entry to the Pattern History Table.
     pattern_history_table_insert(
@@ -411,6 +552,14 @@ void accumulation_table_transfer (
 
     // 3. Delete the entry from the Accumulation Table.
     hash_table_access_delete(accumulation_table, table_index);
+
+    DEBUG(
+        "SMS Accumulation Table transfer: "
+        "Table index %s was found in the Accumulation "
+        "Table. Entry has no been transferred to the "
+        "Pattern History Table!",
+        hexstr64s(table_index)
+    );
 
     return;
 }
@@ -456,6 +605,13 @@ void pattern_history_table_insert (
         evicted_entry_access_pattern
     );
 
+    DEBUG(
+        "SMS Pattern History Table insert: "
+        "Table index %s was inserted into the Pattern"
+        "History Table!",
+        hexstr64s(table_index)
+    );
+
     // 3. Check if the line we just replaced has the same data.
     //  This will be used for a graph in our final lab report.
     if (evicted_entry_access_pattern != NULL) {
@@ -479,16 +635,19 @@ void pattern_history_table_lookup (
     /* Table references */
 	SmsCache* pattern_history_table = (*sms).pattern_history_table;
     SmsCache* dcache =(*(*sms).dcache_stage).dcache;
-    /* Offset variables */
-    SmsAddr line_addr_offset_bits = line_addr & (*dcache).offset_mask; 
-    /* Current program counter (PC) reference */
-    Addr pc = op->inst_info->addr;
-    /* Index variable - used to index tables */
-    TableIndex table_index = pc + line_addr_offset_bits; 
-        // Paper describes pc+offset as the best indexing 
-        //  method.
-        //! Todo (optional): If there's time, let user set the 
-        //! indexing method.
+    /* Instruction access pattern - reveals blocks accessed 
+        by line_data */
+    AccessPattern line_addr_access_pattern = line_address_access_pattern (
+                                                sms,
+                                                line_addr
+                                            ); 
+    
+    TableIndex table_index = get_table_index (
+                                sms,
+                                op,
+                                line_addr
+                            );
+        // pc + line address offset bits
 
     /* Maintain reference to all valid Pattern History 
         Table entries */
@@ -524,6 +683,14 @@ void pattern_history_table_lookup (
         }
     }
 
+    DEBUG(
+        "SMS Pattern History Table lookup: "
+        "Cache search found %d entries associated "
+        "with table index %s!",
+        used_elements,
+        hexstr64s(table_index)
+    );
+
     // End function early if there are no valid cache 
     //  entries.
     if (used_elements == 0) { return; }
@@ -538,6 +705,12 @@ void pattern_history_table_lookup (
 
     // 3. Stream all regions indicated in access pattern 
     //  to the data cache.
+    DEBUG(
+        "SMS Pattern History Table lookup: "
+        "Streaming regions %s to the data cache.",
+        hexstr64s(set_merged_access_pattern)
+    );
+
     sms_stream_blocks_to_data_cache (
         table_index,
         set_merged_access_pattern
