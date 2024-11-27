@@ -6,7 +6,16 @@
  * Description: Header file used to ...
  */
 
+#include "debug/debug_macros.h"
+
 #include "prefetcher/sms.h"
+
+/**************************************************************************************/
+/* Macros */
+/**************************************************************************************/
+
+#define DEBUG(proc_id, args...) _DEBUG(proc_id, DEBUG_DCACHE_STAGE, ##args)
+
 
 /**************************************************************************************/
 /* Function definitions */
@@ -34,7 +43,7 @@ SMS* sms_init (
         (*sms).pattern_history_table
     );
 
-    return;
+    return sms;
 }
 
 void accumulation_table_init (
@@ -146,14 +155,6 @@ Flag check_entry_active_generation_table (
                     accumulation_table_data
                 );
 
-    /* Index variable - used to index tables */
-    TableIndex table_index = get_table_index (
-                                sms,
-                                op,
-                                line_addr
-                            );
-        // pc + line address offset bits
-
     // 1. Check if memory region is already in the Filter Table.
     AccessPattern* filter_table_data = NULL;
     Flag filter_table_flag = filter_table_check (
@@ -162,7 +163,7 @@ Flag check_entry_active_generation_table (
                                 filter_table_data
                             );
 
-    return accumulation_table_flag || filter_table_data;
+    return accumulation_table_flag || filter_table_flag;
 
 }
 
@@ -183,7 +184,7 @@ Flag delete_entry_active_generation_table (
     //  transfer it to the Pattern History Table and 
     //  remove the entry from the Accumulation Table.
     Flag accumulation_table_flag = accumulation_table_transfer (
-                                    (*sms).accumulation_table, 
+                                    sms, 
                                     op,
                                     table_index
                                 );
@@ -219,7 +220,7 @@ TableIndex get_table_index (
     Addr line_addr
 ) {
     Addr pc = (*(*op).inst_info).addr; // program counter (PC)
-    Mask cache_offset_mask = (*(*sms).dcache).offset_mask;
+    Mask cache_offset_mask = (*(*sms).dcache_stage).dcache.offset_mask;
     SmsAddr line_addr_offset_bits = line_addr & cache_offset_mask; 
 
     return pc + line_addr_offset_bits; 
@@ -231,12 +232,13 @@ TableIndex get_table_index (
 
 AccessPattern line_address_access_pattern (
     SMS* sms,
+    Op* op,
     Addr line_addr
 ) {
     uns64 spatial_region_size = (*(*sms).pattern_history_table).line_size;
         // SMS results section recommends this value to be 
         //  2048KB (16384b).
-    uns64 cache_line_size = (*(*sms).dcache).line_size;
+    uns64 cache_line_size = (*(*sms).dcache_stage).dcache.line_size;
         // default Scarab value is 64b.
     uns64 access_pattern_upper_limit = spatial_region_size / cache_line_size;
         // 16384/64 = 256. Meaning
@@ -261,9 +263,9 @@ AccessPattern line_address_access_pattern (
     );
 
     // 2. Set the bit for the accessed block.
-    AccessPattern line_addr_access_pattern = 0;
+    AccessPattern extracted_line_addr_access_pattern = 0;
     if (block_index < access_pattern_upper_limit) {
-        line_addr_access_pattern |= (1ULL << block_index);//? Is this bit shifting logic correct?
+        extracted_line_addr_access_pattern |= (1ULL << block_index);//? Is this bit shifting logic correct?
             // Example: 64/64 represented as an integer is
             //  00...1 (1), but as a bit map it should 
             //  represent 00...10 (access second region).
@@ -283,14 +285,14 @@ AccessPattern line_address_access_pattern (
 
     // Sanity check: check that this is bitwise logic 
     //  worked.
-    if (line_addr_access_pattern == 1) {
+    if (extracted_line_addr_access_pattern == 1) {
         STAT_EVENT(
             op->proc_id, 
             ACCESS_PATTERN_FIRST_REGION_ACCESSED
         );
     }
 
-    return line_addr_access_pattern;
+    return extracted_line_addr_access_pattern;
 }
 
 Flag table_check (
@@ -323,6 +325,7 @@ void filter_table_access (
         by line_data */
     AccessPattern line_addr_access_pattern = line_address_access_pattern (
                                                 sms,
+                                                op,
                                                 line_addr
                                             ); 
     /* Index variable - used to index tables */
@@ -348,7 +351,7 @@ void filter_table_access (
             "SMS Filter Table access: "
             "Table index %s does not exist in the Filter Table. "
             "Allocating new entry...",
-            hexstr64s(table_index);
+            hexstr64s(table_index)
         );
 
         filter_table_insert (
@@ -371,7 +374,7 @@ void filter_table_access (
             "SMS Filter Table access: "
             "Table index %s exists in the Filter Table. "
             "Checking if unique access pattern occurred...",
-            hexstr64s(table_index);
+            hexstr64s(table_index)
         );
 
         AccessPattern memory_region_access_pattern = *ret_line_data;
@@ -415,10 +418,12 @@ void filter_table_insert (
     //  called we can assume that an entry doesn't exist.
 
     // 1. Create new key-value mapping in the Filter table.
-    Flag* new_entry;
+    Flag* new_entry = NULL;
     AccessPattern* data_for_filter_table_insert = 
         (Addr*) hash_table_access_create (
-            filter_table, table_index, new_entry
+            filter_table, 
+            table_index, 
+            new_entry
         );
 
     // 2. Store the access pattern in the Filter Table.
@@ -447,7 +452,7 @@ void filter_table_update (
             "Table index %s was accessed in the Filter Table "
             "in a unique region. Now transferring entry to "
             "the Accumulation Table...",
-            hexstr64s(table_index);
+            hexstr64s(table_index)
         );
         // Region has been uniquely accessed twice now!
 
@@ -481,7 +486,7 @@ void filter_table_update (
             "Table index %s was accessed in the Filter Table "
             "in the same region. It will remain in the Filter "
             "Table...",
-            hexstr64s(table_index);
+            hexstr64s(table_index)
         );
 
         STAT_EVENT(
@@ -489,8 +494,7 @@ void filter_table_update (
             FILTER_TABLE_NO_UPDATE
         );
     }
-    
-    
+
     return;
 }
 
@@ -508,6 +512,7 @@ void accumulation_table_access (
         by line_data */
     AccessPattern line_addr_access_pattern = line_address_access_pattern (
                                                 sms,
+                                                op,
                                                 line_addr
                                             ); 
     /* Index variable - used to index tables */
@@ -534,7 +539,7 @@ void accumulation_table_access (
             "SMS Accumulation Table access: "
             "Table index %s was not found in the Accumulation "
             "Table. Now checking the filter table...",
-            hexstr64s(table_index);
+            hexstr64s(table_index)
         );
 
         filter_table_access(
@@ -596,14 +601,15 @@ void accumulation_table_insert (
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern
 ) {
-    Flag* new_entry;
-
     //1.Create new key-value mapping in the Accumulation
     //  Table.
+    Flag* new_entry = NULL;
     AccessPattern* data_ptr_for_accumulation_table_entry =
             (AccessPattern*) hash_table_access_create (
-                accumulation_table, table_index, new_entry
-            );
+                                accumulation_table, 
+                                table_index, 
+                                new_entry
+                            );
 
     //2.Update access pattern.
     line_addr_access_pattern |= memory_region_access_pattern;
@@ -616,7 +622,7 @@ void accumulation_table_insert (
         "SMS Accumulation Table insert: "
         "Table index %s was successfully inserted "
         "into the Accumulation Table!",
-        hexstr64s(table_index);
+        hexstr64s(table_index)
     );
 
     return;
@@ -673,10 +679,10 @@ Flag accumulation_table_transfer (
     TableIndex table_index
 ) {
     SmsHashTable* accumulation_table = (*sms).accumulation_table;
-    AccessPattern* ret_data;
 
     // 1. Check that the table index exists in the
     //  Accumulation Table.
+    AccessPattern* ret_data = NULL;
     Flag flag = accumulation_table_check(
         accumulation_table,
         table_index,
@@ -778,7 +784,7 @@ void pattern_history_table_insert (
     //  so only entries with the same Tag will be grouped 
     //  together.
     if (evicted_entry_access_pattern != 0) {
-        if (*new_entry_access_pattern == *evicted_entry_access_pattern) { 
+        if (*new_entry_access_pattern == evicted_entry_access_pattern) { 
             STAT_EVENT(
                 op->proc_id, 
                 PATTERN_HISTORY_TABLE_SAME_ENTRY_EVICTED
@@ -810,13 +816,8 @@ void pattern_history_table_lookup (
 ) {
     /* Table references */
 	SmsCache* pattern_history_table = (*sms).pattern_history_table;
-    Cache* dcache =(*(*sms).dcache_stage).dcache;
-    /* Instruction access pattern - reveals blocks accessed 
-        by line_data */
-    AccessPattern line_addr_access_pattern = line_address_access_pattern (
-                                                sms,
-                                                line_addr
-                                            ); 
+    Cache* dcache = &(*(*sms).dcache_stage).dcache;
+
     /* Index variable - used to index tables */
     TableIndex table_index = get_table_index (
                                 sms,
@@ -842,7 +843,7 @@ void pattern_history_table_lookup (
     //? Do I need to call cache_access? Or is checking
     //? the valid bit good enough?
     for (int i = 0; i < (*dcache).assoc; i++) {
-        Cache_Entry *cache_entry = (*pattern_history_table).entries[table_index][i];
+        Cache_Entry *cache_entry = &(*pattern_history_table).entries[table_index][i];
             //? Todo: How to enable table_index lookup, 
             //? instead of set lookup?
             //! Todo: Review this question with TA.
@@ -883,7 +884,7 @@ void pattern_history_table_lookup (
 
     // 2. Merge all access patterns to a single variable.
     AccessPattern set_merged_access_pattern = 0;
-    for (int i = 0; i < (*dcache).assoc; i++) { //? i < used_elements
+    for (int i = 0; i < (*dcache).assoc; i++) { 
         if (set_entries_access_patterns[i] != NULL) {
             set_merged_access_pattern |= *(set_entries_access_patterns[i]);
         }
@@ -907,7 +908,6 @@ void pattern_history_table_lookup (
     //  interval's access pattern.
     filter_table_access(
         sms, 
-        dcache, 
         op, 
         line_addr
     );
@@ -926,11 +926,14 @@ void pattern_history_table_lookup (
 }
 
 
-/* Prediction Register */
-
-void prediction_register_prefetch ();
-
-
 /* Prefetch Queue */
+
+void sms_stream_blocks_to_data_cache (
+    TableIndex table_index,
+    AccessPattern set_merged_access_pattern
+) {
+    //! Todo
+    return;
+}
 
 /**************************************************************************************/

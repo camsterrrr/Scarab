@@ -543,6 +543,14 @@ void prediction_register_prefetch ();
 
 /* Prefetch Queue */
 
+/**
+ * ! Todo: Not sure what this will do quite yet...
+ */
+void sms_stream_blocks_to_data_cache (
+    TableIndex table_index,
+    AccessPattern set_merged_access_pattern
+);
+
 /**************************************************************************************/
 
 #endif /* #ifndef __SMS_H__ */

@@ -458,7 +458,7 @@ void update_dcache_stage(Stage_Data* src_sd) {
             // 1. Check if there is an entry already
             //	in the Filter Table or the Accumulation 
             //	Table.
-            Flag flag = check_active_generation_table(
+            Flag flag = check_entry_active_generation_table(
                             sms,
                             op,
                             line_addr
@@ -568,7 +568,7 @@ void update_dcache_stage(Stage_Data* src_sd) {
             // 1. Check if there is an entry already
             //	in the Filter Table or the Accumulation 
             //	Table.
-            Flag flag = check_active_generation_table(
+            Flag flag = check_entry_active_generation_table(
                             sms,
                             op,
                             line_addr
@@ -682,7 +682,7 @@ void update_dcache_stage(Stage_Data* src_sd) {
             // 1. Check if there is an entry already
             //	in the Filter Table or the Accumulation 
             //	Table.
-            Flag flag = check_active_generation_table(
+            Flag flag = check_entry_active_generation_table(
                             sms,
                             op,
                             line_addr
@@ -920,7 +920,7 @@ Flag dcache_fill_line(Mem_Req* req) {
     //	it exists in either the Filter Table or 
     //	Accumulation Table. If so, delete it.
     Flag flag = delete_entry_active_generation_table (
-                    (*dc).sms,
+                    sms,
                     op,
                     line_addr
                 );
