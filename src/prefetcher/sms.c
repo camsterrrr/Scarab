@@ -252,7 +252,7 @@ AccessPattern line_address_access_pattern (
 
     // 1. Compute the cache block index.
     AccessPattern block_index = (
-        line_addr_offset_bits / cache_line_size
+        line_addr_offset_bits / cache_line_size 
             // Scarab's default line size is 64b, so think
             //  of this line as being o-bits / 64. This 
             //  operation defines the block being accessed.
@@ -260,12 +260,15 @@ AccessPattern line_address_access_pattern (
             //  63/64 = 0, so we're accessing the first 
             //  memory region. 64/64 means we're accessing
             //  the second region, and so on.
+            // Remember, there are 16KB entries in the
+            //  table and the line size is 2KB. Number 
+            //  entries and line size are not the same!
     );
 
     // 2. Set the bit for the accessed block.
     AccessPattern extracted_line_addr_access_pattern = 0;
     if (block_index < access_pattern_upper_limit) {
-        extracted_line_addr_access_pattern |= (1ULL << block_index);//? Is this bit shifting logic correct?
+        extracted_line_addr_access_pattern |= (1ULL << block_index);
             // Example: 64/64 represented as an integer is
             //  00...1 (1), but as a bit map it should 
             //  represent 00...10 (access second region).
@@ -293,6 +296,103 @@ AccessPattern line_address_access_pattern (
     }
 
     return extracted_line_addr_access_pattern;
+}
+
+void sms_dcache_insert (
+    SMS* sms,
+    Op* op,
+    Addr line_addr
+) {
+    // 1. Check if there is an entry already
+    //	in the Filter Table or the Accumulation 
+    //	Table.
+    Flag flag = check_entry_active_generation_table(
+                    sms,
+                    op,
+                    line_addr
+                );
+
+    // 2. If there is an entry associated with
+    //	this PC+line address already in the 
+    //	Accumulation Table or the Filter Table,
+    // 	then proceed as normal.
+    if (flag) {
+        accumulation_table_access (
+            sms,
+            op,
+            line_addr
+        );
+
+        STAT_EVENT(
+            op->proc_id, 
+            ACCUMULATION_TABLE_ACCESS
+        );
+    }
+
+    // 3. If there is NOT an entry associated 
+    //	with this PC+line address in either 
+    //	table, then assume trigger access.
+    //	Stream blocks to the cache, then
+    //	allocate entry in the Filter Table.
+    else {
+        pattern_history_table_lookup (
+            sms, 
+            op,
+            line_addr
+        );
+
+        STAT_EVENT(
+            op->proc_id, 
+            PATTERN_HISTORY_TABLE_LOOKUP
+        );
+    }
+}
+
+void sms_dcache_insert (
+    SMS* sms,
+    Op* op,
+    Addr line_addr,
+    Addr repl_line_addr
+) {
+     // 1. Check if a cache entry was evicted 
+    //	from the data cache.
+    if (repl_line_addr == 0) {
+        STAT_EVENT(
+            op->proc_id, 
+            CACHE_INSERT_NO_REPLACEMENT
+        );
+    }
+
+    else {
+        STAT_EVENT(
+            op->proc_id, 
+            CACHE_INSERT_ENTRY_REPLACED
+        );
+    }
+
+    // 2. If cache entry was evicted, check if 
+    //	it exists in either the Filter Table or 
+    //	Accumulation Table. If so, delete it.
+    Flag flag = delete_entry_active_generation_table (
+                    sms,
+                    op,
+                    line_addr
+                );
+
+    if (flag) {
+        STAT_EVENT(
+            op->proc_id, 
+            ENTRY_DELETED_FROM_ACTIVE_GENERATION_TABLE
+        );
+    } 
+
+    // 3. Else do nothing.
+    else {
+        STAT_EVENT(
+            op->proc_id, 
+            ENTRY_NOT_FOUND_IN_ACTIVE_GENERATION_TABLE
+        );
+    }
 }
 
 Flag table_check (
@@ -898,12 +998,27 @@ void pattern_history_table_lookup (
         hexstr64s(set_merged_access_pattern)
     );
 
+    // Something went wrong.
+    if (set_merged_access_pattern == 0) {
+        DEBUG(
+            "SMS Pattern History Table lookup: "
+            "Access pattern was 0!"
+        );
+        STAT_EVENT(
+            op->proc_id, 
+            PATTERN_HISTORY_TABLE_MERGED_ACCESS_PATTERN_ZERO
+        );
+    }
+
+    // 4. Stream the regions of memory to the Dcache.
     sms_stream_blocks_to_data_cache (
+        sms,
         table_index,
+        line_addr,
         set_merged_access_pattern
     );
     
-    // 4. Add entry to the Filter Table. This happens 
+    // 5. Add entry to the Filter Table. This happens 
     //  no matter what. We want to track this new 
     //  interval's access pattern.
     filter_table_access(
@@ -929,10 +1044,110 @@ void pattern_history_table_lookup (
 /* Prefetch Queue */
 
 void sms_stream_blocks_to_data_cache (
+    SMS* sms,
     TableIndex table_index,
+    Addr line_addr,
     AccessPattern set_merged_access_pattern
-) {
-    //! Todo
+) { 
+
+    // 1. Calculate the region's base address
+    Mask sms_offset_mask = (*(*sms).pattern_history_table).offset_mask;
+    SmsAddr base_address_of_region = line_addr & ~sms_offset_mask;
+
+    // 2. Find the total number of regions tracked 
+    //  by the access pattern.
+    uns num_regions = 0;
+    for (uns i = 0; i < 64; i++) {
+        if ((set_merged_access_pattern >> i) & 1) {
+            num_regions++;
+        }
+    }
+
+    DEBUG(
+        "SMS stream blocks to Dcache: "
+        "Streaming %d regions from base region to "
+        "the data cache: %s",
+        num_regions,
+        hexstr64s(base_address_of_region)
+    );
+
+    // 3. Iterate over bit map and store each 
+    //  entries in a prediction register.
+    // Remember, that each predition register
+    //  stores a unique cache block address.
+    //  Before calling this function, we 
+    //  merged all known access patterns into
+    //  a single variable. This variable 
+    //  indicates which regions of memory need
+    //  to be "streamed".
+    SmsAddr* prediction_registers = 
+        (SmsAddr*) malloc(num_regions * sizeof(SmsAddr));
+    uns region_offset = 0;
+
+    int arr_idx = 0;
+    for (uns i = 0; i < 64; i++) {
+        // 3a. Check if ith bit in the access pattern
+        //  is set to 1. If so, calculate the address 
+        //  the prediction register should point to. 
+        //  Else, increment and move on. 
+
+        if ((set_merged_access_pattern >> i) & 1) {
+            prediction_registers[arr_idx] = (
+                base_address_of_region + region_offset
+                    // Base region + region number.
+                    //  Example: 0x1000 + region 0.
+                    //  Well, region 0 is the first 
+                    //  region, so the equation would
+                    //  be: 0x1000 + 0 = 0x1000.
+                    //  Region 2 would be 0x1000 + 64.
+                    //  Region 3 would be 0x1000 + 128.
+                    //  And so on...
+            );
+
+            arr_idx++;
+        }
+        // 3b. Increment region offset variable by the
+        //  size of dcache cache blocks.
+        region_offset += (*(*sms).dcache_stage).dcache.line_size;
+            // Default Scarab line size is 64. So,
+            //  0+64, 64+64, 128+64 ... In 2KB Pattern
+            //  History Table line size, there would 
+            //  be 32 (2KB/64) positions in the bitmap.
+            // Remember, there are 16KB entries in the
+            //  table and the line size is 2KB. Number 
+            //  entries and line size are not the same!
+    }
+
+    // 4."Stream" each of the blocks to the Dcache.
+    for (uns i = 0; i < num_regions; i++) {
+
+        SmsAddr line_addr = prediction_registers[i];
+        SmsAddr repl_line_addr = NULL;
+
+        Dcache_Data* dcache_line_data = 
+                (Dcache_Data*) cache_insert(
+                                    &(*(*sms).dcache_stage).dcache, 
+                                    (*(*sms).dcache_stage).dcache.proc_id, 
+                                    line_addr,
+                                    &line_addr, 
+                                    &repl_line_addr
+                                );
+
+        (*dcache_line_data).HW_prefetch = TRUE;
+
+        void sms_dcache_insert (
+            sms,
+            op,
+            line_addr,
+            repl_line_addr
+        ); 
+
+        STAT_EVENT(
+            op->proc_id, 
+            BLOCKS_STREAMED_TO_DCACHE
+        );
+    }
+
     return;
 }
 

@@ -137,12 +137,6 @@ void init_dcache_stage(uns8 proc_id, const char* name) {
         sms = sms_init(dc);
     } 
 
-    // 2. Something unexpected happened - multiple 
-    // Dcache stages initialized...
-    else {
-        //! Todo: Add stat counter.
-    }
-
 /**************************************************************************************/
 
 
@@ -455,49 +449,11 @@ void update_dcache_stage(Stage_Data* src_sd) {
 /* SMS */
 /**************************************************************************************/
 
-            // 1. Check if there is an entry already
-            //	in the Filter Table or the Accumulation 
-            //	Table.
-            Flag flag = check_entry_active_generation_table(
-                            sms,
-                            op,
-                            line_addr
-                        );
-
-            // 2. If there is an entry associated with
-            //	this PC+line address already in the 
-            //	Accumulation Table or the Filter Table,
-            // 	then proceed as normal.
-            if (flag) {
-                accumulation_table_access (
-                    sms,
-                    op,
-                    line_addr
-                );
-
-                STAT_EVENT(
-                    op->proc_id, 
-                    ACCUMULATION_TABLE_ACCESS
-                );
-            }
-
-            // 3. If there is NOT an entry associated 
-            //	with this PC+line address in either 
-            //	table, then assume trigger access.
-            //	Stream blocks to the cache, then
-            //	allocate entry in the Filter Table.
-            else {
-                pattern_history_table_lookup (
-                    sms, 
-                    op,
-                    line_addr
-                );
-
-                STAT_EVENT(
-                    op->proc_id, 
-                    PATTERN_HISTORY_TABLE_LOOKUP
-                );
-            }
+            void sms_dcache_access (
+                sms,
+                op,
+                line_addr
+            );
 
 /**************************************************************************************/
 
@@ -565,49 +521,11 @@ void update_dcache_stage(Stage_Data* src_sd) {
 /* SMS */
 /**************************************************************************************/
 
-            // 1. Check if there is an entry already
-            //	in the Filter Table or the Accumulation 
-            //	Table.
-            Flag flag = check_entry_active_generation_table(
-                            sms,
-                            op,
-                            line_addr
-                        );
-
-            // 2. If there is an entry associated with
-            //	this PC+line address already in the 
-            //	Accumulation Table or the Filter Table,
-            // 	then proceed as normal.
-            if (flag) {
-                accumulation_table_access (
-                    sms,
-                    op,
-                    line_addr
-                );
-
-                STAT_EVENT(
-                    op->proc_id, 
-                    ACCUMULATION_TABLE_ACCESS
-                );
-            }
-
-            // 3. If there is NOT an entry associated 
-            //	with this PC+line address in either 
-            //	table, then assume trigger access.
-            //	Stream blocks to the cache, then
-            //	allocate entry in the Filter Table.
-            else {
-                pattern_history_table_lookup (
-                    sms, 
-                    op,
-                    line_addr
-                );
-
-                STAT_EVENT(
-                    op->proc_id, 
-                    PATTERN_HISTORY_TABLE_LOOKUP
-                );
-            }
+            void sms_dcache_access (
+                sms,
+                op,
+                line_addr
+            );
 
 /**************************************************************************************/
 
@@ -679,49 +597,11 @@ void update_dcache_stage(Stage_Data* src_sd) {
 /* SMS */
 /**************************************************************************************/
 
-            // 1. Check if there is an entry already
-            //	in the Filter Table or the Accumulation 
-            //	Table.
-            Flag flag = check_entry_active_generation_table(
-                            sms,
-                            op,
-                            line_addr
-                        );
-
-            // 2. If there is an entry associated with
-            //	this PC+line address already in the 
-            //	Accumulation Table or the Filter Table,
-            // 	then proceed as normal.
-            if (flag) {
-                accumulation_table_access (
-                    sms,
-                    op,
-                    line_addr
-                );
-
-                STAT_EVENT(
-                    op->proc_id, 
-                    ACCUMULATION_TABLE_ACCESS
-                );
-            }
-
-            // 3. If there is NOT an entry associated 
-            //	with this PC+line address in either 
-            //	table, then assume trigger access.
-            //	Stream blocks to the cache, then
-            //	allocate entry in the Filter Table.
-            else {
-                pattern_history_table_lookup (
-                    sms, 
-                    op,
-                    line_addr
-                );
-
-                STAT_EVENT(
-                    op->proc_id, 
-                    PATTERN_HISTORY_TABLE_LOOKUP
-                );
-            }
+            void sms_dcache_access (
+                sms,
+                op,
+                line_addr
+            );
 
 /**************************************************************************************/
 
@@ -900,45 +780,12 @@ Flag dcache_fill_line(Mem_Req* req) {
 /* SMS */
 /**************************************************************************************/
 
-    // 1. Check if a cache entry was evicted 
-    //	from the data cache.
-    if (repl_line_addr == 0) {
-        STAT_EVENT(
-            op->proc_id, 
-            CACHE_INSERT_NO_REPLACEMENT
-        );
-    }
-
-    else {
-        STAT_EVENT(
-            op->proc_id, 
-            CACHE_INSERT_ENTRY_REPLACED
-        );
-    }
-
-    // 2. If cache entry was evicted, check if 
-    //	it exists in either the Filter Table or 
-    //	Accumulation Table. If so, delete it.
-    Flag flag = delete_entry_active_generation_table (
-                    sms,
-                    op,
-                    line_addr
-                );
-
-    if (flag) {
-        STAT_EVENT(
-            op->proc_id, 
-            ENTRY_DELETED_FROM_ACTIVE_GENERATION_TABLE
-        );
-    } 
-
-    // 3. Else do nothing.
-    else {
-        STAT_EVENT(
-            op->proc_id, 
-            ENTRY_NOT_FOUND_IN_ACTIVE_GENERATION_TABLE
-        );
-    }
+    void sms_dcache_insert (
+        sms,
+        op,
+        line_addr,
+        repl_line_addr
+    ); 
 
 /**************************************************************************************/
 

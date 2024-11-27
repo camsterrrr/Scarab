@@ -169,14 +169,6 @@ void pattern_history_table_init (
 /* Helper Functions */
 
 /**
- * 
- */
-//! Todo: not sure how to stream blocks.
-void sms_stream_blocks_to_data_cache (
-
-);
-
-/**
  * This function is used to check if a PC+line index 
  *  exists in either the Filter Table or the 
  *  Accumulation Table. If it exists in either return
@@ -253,6 +245,41 @@ AccessPattern line_address_access_pattern (
     SMS* sms,
     Op* op,
     Addr line_addr
+);
+
+/**
+ * 
+ * 
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param op Pointer to object containing metadata about the
+ *  current instruction being executed.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
+ */
+void sms_dcache_insert (
+    SMS* sms,
+    Op* op,
+    Addr line_addr
+);
+
+/**
+ * 
+ * 
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param op Pointer to object containing metadata about the
+ *  current instruction being executed.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
+ * @param repl_line_addr The data that was evicted from the
+ *  Dcache.
+ */
+void sms_dcache_insert (
+    sms,
+    op,
+    line_addr,
+    repl_line_addr
 );
 
 /**
@@ -544,10 +571,12 @@ void prediction_register_prefetch ();
 /* Prefetch Queue */
 
 /**
- * ! Todo: Not sure what this will do quite yet...
+ * 
  */
 void sms_stream_blocks_to_data_cache (
+    SMS* sms,
     TableIndex table_index,
+    Addr line_addr,
     AccessPattern set_merged_access_pattern
 );
 
