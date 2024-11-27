@@ -244,11 +244,14 @@ TableIndex get_table_index (
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
+ * @param op Pointer to object containing metadata about the
+ *  current instruction being executed.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
 AccessPattern line_address_access_pattern (
     SMS* sms,
+    Op* op,
     Addr line_addr
 );
 
@@ -345,6 +348,8 @@ void filter_table_insert (
  * @param filter_table Pointer to the filter table.
  * @param accumulation_table Pointer to the accumulation 
  *  table.
+ * @param op Pointer to object containing metadata about the
+ *  current instruction being executed.
  * @param table_index Computed table index (PC+offset).
  * @param line_addr_access_pattern  Current access 
  *  pattern of the region.
@@ -354,6 +359,7 @@ void filter_table_insert (
 void filter_table_update (
     SmsHashTable* filter_table, 
     SmsHashTable* accumulation_table, 
+    Op* op,
     TableIndex table_index,
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern
@@ -415,12 +421,15 @@ Flag accumulation_table_check (
  * 
  * @param accumulation_table Pointer to the Accumulation
  *  Table.
+ * @param op Pointer to object containing metadata about the
+ *  current instruction being executed.
  * @param table_index Computed table index (PC+offset).
  * @param line_addr_access_pattern  Current access 
  *  pattern of the region.
  */
 void accumulation_table_insert (
     SmsHashTable* accumulation_table,
+    Op* op,
     TableIndex table_index,
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern
@@ -433,6 +442,8 @@ void accumulation_table_insert (
  * 
  * @param accumulation_table Pointer to the accumulation 
  *  table.
+ * @param op Pointer to object containing metadata about the
+ *  current instruction being executed.
  * @param table_index Computed table index (PC+offset).
  * @param line_addr_access_pattern  Current access 
  *  pattern of the region.
@@ -443,6 +454,7 @@ void accumulation_table_insert (
  */
 void accumulation_table_update (
     SmsHashTable* accumulation_table, 
+    Op* op,
     TableIndex table_index,
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern,
@@ -462,10 +474,13 @@ void accumulation_table_update (
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
+ * @param op Pointer to object containing metadata about the
+ *  current instruction being executed.
  * @param table_index Computed table index (PC+offset).
  */
 Flag accumulation_table_transfer (
     SMS* sms, 
+    Op* op,
     TableIndex table_index
 );
 
@@ -481,7 +496,9 @@ Flag accumulation_table_transfer (
  * @param pattern_history_table Pointer to cache object.
  * @param dcache_stage Pointer to object maintaining 
  *  references for useful data cache stage and data cache 
- * metadata.
+ *  metadata.
+ * @param op Pointer to object containing metadata about the
+ *  current instruction being executed.
  * @param table_index Computed table index (PC+offset).
  * @param memory_region_access_pattern Access pattern of 
  *  the region.
@@ -489,6 +506,7 @@ Flag accumulation_table_transfer (
 void pattern_history_table_insert (
     SmsCache* pattern_history_table,
     Dcache_Stage* dcache_stage,
+    Op* op,
     TableIndex table_index, // Assume this is calculated by caller.
     AccessPattern memory_region_access_pattern
 );

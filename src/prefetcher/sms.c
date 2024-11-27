@@ -157,10 +157,10 @@ Flag check_entry_active_generation_table (
     // 1. Check if memory region is already in the Filter Table.
     AccessPattern* filter_table_data = NULL;
     Flag filter_table_flag = filter_table_check (
-                    (*sms).filter_table, 
-                    table_index, 
-                    filter_table_data
-                );
+                                (*sms).filter_table, 
+                                table_index, 
+                                filter_table_data
+                            );
 
     return accumulation_table_flag || filter_table_data;
 
@@ -183,9 +183,10 @@ Flag delete_entry_active_generation_table (
     //  transfer it to the Pattern History Table and 
     //  remove the entry from the Accumulation Table.
     Flag accumulation_table_flag = accumulation_table_transfer (
-                            (*sms).accumulation_table, 
-                            table_index
-                        );
+                                    (*sms).accumulation_table, 
+                                    op,
+                                    table_index
+                                );
 
     // 2. If it wasn't in the Accumulation Table,
     //  remove the entry from the Filter Table.
@@ -195,6 +196,15 @@ Flag delete_entry_active_generation_table (
                                 (*sms).filter_table, 
                                 table_index
                             );
+    } 
+
+    // 3. Sanity check: maintain counters indicating
+    //  what occurred.
+    else {
+        STAT_EVENT(
+            op->proc_id, 
+            ENTRY_TRANSFERRED_FROM_ACCUMULATION_TABLE
+        );
     }
 
     return accumulation_table_flag || filter_table_flag;
@@ -262,13 +272,22 @@ AccessPattern line_address_access_pattern (
             //  represent 00...1 (access first region).
     }
 
+    // Something went wrong...
     else {
-        // Something went wrong.
-        //! Todo: Add stat counter.
+        
+        STAT_EVENT(
+            op->proc_id, 
+            ACCESS_PATTERN_BLOCK_INDEX_OVER_SPATIAL_PATTERN_LIMIT
+        );
     }
 
-    if (block_index == 0) {
-        //! Todo: Add stat counter here.
+    // Sanity check: check that this is bitwise logic 
+    //  worked.
+    if (line_addr_access_pattern == 1) {
+        STAT_EVENT(
+            op->proc_id, 
+            ACCESS_PATTERN_FIRST_REGION_ACCESSED
+        );
     }
 
     return line_addr_access_pattern;
@@ -282,8 +301,8 @@ Flag table_check (
     Flag flag;
 
 	ret_data = (AccessPattern*) hash_table_access(
-            table, table_index
-        );
+                                    table, table_index
+                                );
 
     flag = (ret_data == NULL) ? FALSE : TRUE;
 
@@ -338,7 +357,10 @@ void filter_table_access (
             line_addr_access_pattern
         );
 
-        //! Todo: Add stat counter.
+        STAT_EVENT(
+            op->proc_id, 
+            FILTER_TABLE_INSERT
+        );
 	}
 
 	// 2b. If memory region does exist in filter table, 
@@ -358,12 +380,16 @@ void filter_table_access (
         filter_table_update(
             filter_table,
             (*sms).accumulation_table,
+            op,
             table_index,
             line_addr_access_pattern,
             memory_region_access_pattern
         );
 
-        //! Todo: Add stat counter.
+        STAT_EVENT(
+            op->proc_id, 
+            FILTER_TABLE_UPDATE_CALLED
+        );
     }
 
     return;
@@ -404,6 +430,7 @@ void filter_table_insert (
 void filter_table_update (
     SmsHashTable* filter_table, 
     SmsHashTable* accumulation_table, 
+    Op* op,
     TableIndex table_index,
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern
@@ -428,6 +455,7 @@ void filter_table_update (
         //  table.
         accumulation_table_insert (
             accumulation_table,
+            op,
             table_index,
             line_addr_access_pattern,
             memory_region_access_pattern
@@ -436,7 +464,14 @@ void filter_table_update (
         // 2d. Remove from the Filter Table.
         hash_table_access_delete(filter_table, table_index);
 
-        //! Todo: Add stat counter.
+        STAT_EVENT(
+            op->proc_id, 
+            ACCUMULATION_TABLE_INSERT
+        );
+        STAT_EVENT(
+            op->proc_id, 
+            FILTER_TABLE_TRANSFER
+        );
     }
 
     // 3. Else, the same region has been accessed. Therefore, do nothing.
@@ -449,7 +484,10 @@ void filter_table_update (
             hexstr64s(table_index);
         );
 
-        //! Todo: Add stat counter.
+        STAT_EVENT(
+            op->proc_id, 
+            FILTER_TABLE_NO_UPDATE
+        );
     }
     
     
@@ -505,7 +543,20 @@ void accumulation_table_access (
             line_addr
         );
 
-        //! Todo: Add stat counter.
+        STAT_EVENT(
+            op->proc_id, 
+            FILTER_TABLE_INSERT
+        );
+
+        STAT_EVENT(
+            op->proc_id, 
+            FILTER_TABLE_ACCESS
+        );
+        
+        STAT_EVENT(
+            op->proc_id, 
+            ENTRY_NOT_IN_ACCUMULATION
+        );
 	}
 
 	// 2b. If entry does exist in accumulation table, then
@@ -517,6 +568,7 @@ void accumulation_table_access (
 
         accumulation_table_update(
             accumulation_table,
+            op,
             table_index,
             line_addr_access_pattern,
             memory_region_access_pattern,
@@ -539,6 +591,7 @@ Flag accumulation_table_check (
 
 void accumulation_table_insert (
     SmsHashTable* accumulation_table,
+    Op* op,
     TableIndex table_index,
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern
@@ -571,6 +624,7 @@ void accumulation_table_insert (
 
 void accumulation_table_update (
     SmsHashTable* accumulation_table, 
+    Op* op,
     TableIndex table_index,
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern,
@@ -595,13 +649,19 @@ void accumulation_table_update (
         //  Table.
         *ret_data = line_addr_access_pattern;
 
-        //! Todo: Add stat counter.
+        STAT_EVENT(
+            op->proc_id, 
+            ACCUMULATION_TABLE_UPDATE
+        );
     }
 
     // 2. Else, the same region has been accessed. 
     //  Therefore, do nothing.
     else {
-        //! Todo: Add stat counter.
+        STAT_EVENT(
+            op->proc_id, 
+            ACCUMULATION_TABLE_NO_UPDATE
+        );
     }
 
     return;
@@ -609,6 +669,7 @@ void accumulation_table_update (
 
 Flag accumulation_table_transfer (
     SMS* sms, 
+    Op* op,
     TableIndex table_index
 ) {
     SmsHashTable* accumulation_table = (*sms).accumulation_table;
@@ -632,6 +693,11 @@ Flag accumulation_table_transfer (
             hexstr64s(table_index)
         );
 
+        STAT_EVENT(
+            op->proc_id, 
+            ACCUMULATION_TABLE_TRANSFER_FAILED
+        );
+
         return FALSE; 
     }
 
@@ -639,6 +705,7 @@ Flag accumulation_table_transfer (
     pattern_history_table_insert(
         (*sms).pattern_history_table,
         (*sms).dcache_stage,
+        op,
         table_index,
         *ret_data
     );
@@ -657,6 +724,11 @@ Flag accumulation_table_transfer (
         hexstr64s(table_index)
     );
 
+    STAT_EVENT(
+        op->proc_id, 
+        ACCUMULATION_TABLE_TRANSFER
+    );
+
     return TRUE;
 }
 
@@ -666,6 +738,7 @@ Flag accumulation_table_transfer (
 void pattern_history_table_insert (
     SmsCache* pattern_history_table,
     Dcache_Stage* dcache_stage,
+    Op* op,
     TableIndex table_index, 
         // Assume this is calculated by caller.
     AccessPattern memory_region_access_pattern
@@ -706,16 +779,25 @@ void pattern_history_table_insert (
     //  together.
     if (evicted_entry_access_pattern != 0) {
         if (*new_entry_access_pattern == *evicted_entry_access_pattern) { 
-            //! Todo: Increment counters
+            STAT_EVENT(
+                op->proc_id, 
+                PATTERN_HISTORY_TABLE_SAME_ENTRY_EVICTED
+            );
         }
         else { 
-            //! Todo: Increment counters
+            STAT_EVENT(
+                op->proc_id, 
+                PATTERN_HISTORY_TABLE_DIFFERENT_ENTRY_EVICTED
+            );
         }
     } 
 
     // 4. Else no line was evicted from the cache.
     else {
-        //! Todo: Increment counters
+        STAT_EVENT(
+            op->proc_id, 
+            PATTERN_HISTORY_TABLE_NO_ENTRY_EVICTED
+        );
     }
 
     return;
@@ -772,8 +854,18 @@ void pattern_history_table_lookup (
             (*cache_entry).last_access_time = sim_time;
             set_entries_access_patterns[i] = (*cache_entry).data;
             used_elements++;
+
+            STAT_EVENT(
+                op->proc_id, 
+                PATTERN_HISTORY_TABLE_NONNULL_CACHE_ENTRY
+            );
         } else {
             set_entries_access_patterns[i] = NULL;
+            
+            STAT_EVENT(
+                op->proc_id, 
+                PATTERN_HISTORY_TABLE_NULL_CACHE_ENTRY
+            );
         }
     }
 
@@ -818,6 +910,16 @@ void pattern_history_table_lookup (
         dcache, 
         op, 
         line_addr
+    );
+
+    STAT_EVENT(
+        op->proc_id, 
+        FILTER_TABLE_INSERT
+    );
+
+    STAT_EVENT(
+        op->proc_id, 
+        FILTER_TABLE_ACCESS
     );
 
     return;

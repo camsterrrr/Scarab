@@ -474,6 +474,11 @@ void update_dcache_stage(Stage_Data* src_sd) {
                     op,
                     line_addr
                 );
+
+                STAT_EVENT(
+                    op->proc_id, 
+                    ACCUMULATION_TABLE_ACCESS
+                );
             }
 
             // 3. If there is NOT an entry associated 
@@ -486,6 +491,11 @@ void update_dcache_stage(Stage_Data* src_sd) {
                     sms, 
                     op,
                     line_addr
+                );
+
+                STAT_EVENT(
+                    op->proc_id, 
+                    PATTERN_HISTORY_TABLE_LOOKUP
                 );
             }
 
@@ -559,7 +569,7 @@ void update_dcache_stage(Stage_Data* src_sd) {
             //	in the Filter Table or the Accumulation 
             //	Table.
             Flag flag = check_active_generation_table(
-                            (*dc).sms,
+                            sms,
                             op,
                             line_addr
                         );
@@ -570,9 +580,14 @@ void update_dcache_stage(Stage_Data* src_sd) {
             // 	then proceed as normal.
             if (flag) {
                 accumulation_table_access (
-                    (*dc).sms,
+                    sms,
                     op,
                     line_addr
+                );
+
+                STAT_EVENT(
+                    op->proc_id, 
+                    ACCUMULATION_TABLE_ACCESS
                 );
             }
 
@@ -583,9 +598,14 @@ void update_dcache_stage(Stage_Data* src_sd) {
             //	allocate entry in the Filter Table.
             else {
                 pattern_history_table_lookup (
-                    (*dc).sms, 
+                    sms, 
                     op,
                     line_addr
+                );
+
+                STAT_EVENT(
+                    op->proc_id, 
+                    PATTERN_HISTORY_TABLE_LOOKUP
                 );
             }
 
@@ -678,6 +698,11 @@ void update_dcache_stage(Stage_Data* src_sd) {
                     op,
                     line_addr
                 );
+
+                STAT_EVENT(
+                    op->proc_id, 
+                    ACCUMULATION_TABLE_ACCESS
+                );
             }
 
             // 3. If there is NOT an entry associated 
@@ -690,6 +715,11 @@ void update_dcache_stage(Stage_Data* src_sd) {
                     sms, 
                     op,
                     line_addr
+                );
+
+                STAT_EVENT(
+                    op->proc_id, 
+                    PATTERN_HISTORY_TABLE_LOOKUP
                 );
             }
 
@@ -873,7 +903,17 @@ Flag dcache_fill_line(Mem_Req* req) {
     // 1. Check if a cache entry was evicted 
     //	from the data cache.
     if (repl_line_addr == 0) {
-        //! Todo: Add stat counter.
+        STAT_EVENT(
+            op->proc_id, 
+            CACHE_INSERT_NO_REPLACEMENT
+        );
+    }
+
+    else {
+        STAT_EVENT(
+            op->proc_id, 
+            CACHE_INSERT_ENTRY_REPLACED
+        );
     }
 
     // 2. If cache entry was evicted, check if 
@@ -886,12 +926,18 @@ Flag dcache_fill_line(Mem_Req* req) {
                 );
 
     if (flag) {
-        //! Todo: Add stat counter.
+        STAT_EVENT(
+            op->proc_id, 
+            ENTRY_DELETED_FROM_ACTIVE_GENERATION_TABLE
+        );
     } 
 
     // 3. Else do nothing.
     else {
-        //! Todo: Add stat counter.
+        STAT_EVENT(
+            op->proc_id, 
+            ENTRY_NOT_FOUND_IN_ACTIVE_GENERATION_TABLE
+        );
     }
 
 /**************************************************************************************/
