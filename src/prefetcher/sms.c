@@ -28,7 +28,7 @@ SMS* sms_init (
         (*sms).accumulation_table
     );
     filter_table_init (
-        (*sms).filter_tabl
+        (*sms).filter_table
     );
     pattern_history_table_init (
         (*sms).pattern_history_table
@@ -126,6 +126,83 @@ void pattern_history_table_init (
 
 /* Helper functions */
 
+Flag check_entry_active_generation_table (
+    SMS* sms,
+    Op* op,
+    Addr line_addr
+) {
+
+    /* Index variable - used to index tables */
+    TableIndex table_index = get_table_index (
+                                sms,
+                                op,
+                                line_addr
+                            );
+
+    AccessPattern* accumulation_table_data = NULL;
+    Flag accumulation_table_flag = accumulation_table_check (
+                    (*sms).accumulation_table, 
+                    table_index, 
+                    accumulation_table_data
+                );
+
+    /* Index variable - used to index tables */
+    TableIndex table_index = get_table_index (
+                                sms,
+                                op,
+                                line_addr
+                            );
+        // pc + line address offset bits
+
+    // 1. Check if memory region is already in the Filter Table.
+    AccessPattern* filter_table_data = NULL;
+    Flag filter_table_flag = filter_table_check (
+                    (*sms).filter_table, 
+                    table_index, 
+                    filter_table_data
+                );
+
+    return accumulation_table_flag || filter_table_data;
+
+}
+
+Flag delete_entry_active_generation_table (
+    SMS* sms,
+    Op* op,
+    Addr line_addr
+) {
+
+    /* Index variable - used to index tables */
+    TableIndex table_index = get_table_index (
+                                sms,
+                                op,
+                                line_addr
+                            );
+
+    // 1. If entry is in the Accumulation Table,
+    //  transfer it to the Pattern History Table and 
+    //  remove the entry from the Accumulation Table.
+    Flag accumulation_table_flag = accumulation_table_transfer (
+                            (*sms).accumulation_table, 
+                            table_index
+                        );
+
+    // 2. If it wasn't in the Accumulation Table,
+    //  remove the entry from the Filter Table.
+    Flag filter_table_flag = FALSE;
+    if (!accumulation_table_flag) {
+        filter_table_flag = hash_table_access_delete (
+                                (*sms).filter_table, 
+                                table_index
+                            );
+    }
+
+    return accumulation_table_flag || filter_table_flag;
+        // Return True if the entry was deleted from 
+        //  either table.
+
+}
+
 TableIndex get_table_index (
     SMS* sms,
     Op* op,
@@ -135,8 +212,6 @@ TableIndex get_table_index (
     Mask cache_offset_mask = (*(*sms).dcache).offset_mask;
     SmsAddr line_addr_offset_bits = line_addr & cache_offset_mask; 
 
-
-    /* Index variable - used to index tables */
     return pc + line_addr_offset_bits; 
         // SMS results discuss this as being the most 
         //  effective strategy to index the SMS tables.
@@ -155,7 +230,7 @@ AccessPattern line_address_access_pattern (
         // default Scarab value is 64b.
     uns64 access_pattern_upper_limit = spatial_region_size / cache_line_size;
         // 16384/64 = 256. Meaning
-    Mask cache_offset_mask = (*(*sms).dcache).offset_mask;
+    Mask cache_offset_mask = (*(*sms).pattern_history_table).offset_mask;
     SmsAddr line_addr_offset_bits = line_addr & cache_offset_mask; 
 
     // Remember an Access Pattern (spatial pattern) is just
@@ -199,9 +274,6 @@ AccessPattern line_address_access_pattern (
     return line_addr_access_pattern;
 }
 
-
-/* Filter Table */
-
 Flag table_check (
     SmsHashTable* table, 
     TableIndex table_index, 
@@ -218,6 +290,9 @@ Flag table_check (
     return flag;
 }
 
+
+/* Filter Table */
+
 void filter_table_access (
     SMS* sms,
     Op* op,
@@ -231,7 +306,7 @@ void filter_table_access (
                                                 sms,
                                                 line_addr
                                             ); 
-    
+    /* Index variable - used to index tables */
     TableIndex table_index = get_table_index (
                                 sms,
                                 op,
@@ -262,6 +337,8 @@ void filter_table_access (
             table_index, 
             line_addr_access_pattern
         );
+
+        //! Todo: Add stat counter.
 	}
 
 	// 2b. If memory region does exist in filter table, 
@@ -285,6 +362,8 @@ void filter_table_access (
             line_addr_access_pattern,
             memory_region_access_pattern
         );
+
+        //! Todo: Add stat counter.
     }
 
     return;
@@ -356,16 +435,23 @@ void filter_table_update (
 
         // 2d. Remove from the Filter Table.
         hash_table_access_delete(filter_table, table_index);
+
+        //! Todo: Add stat counter.
     }
 
     // 3. Else, the same region has been accessed. Therefore, do nothing.
-    DEBUG(
-        "SMS Filter Table update: "
-        "Table index %s was accessed in the Filter Table "
-        "in the same region. It will remain in the Filter "
-        "Table...",
-        hexstr64s(table_index);
-    );
+    else {
+        DEBUG(
+            "SMS Filter Table update: "
+            "Table index %s was accessed in the Filter Table "
+            "in the same region. It will remain in the Filter "
+            "Table...",
+            hexstr64s(table_index);
+        );
+
+        //! Todo: Add stat counter.
+    }
+    
     
     return;
 }
@@ -375,7 +461,6 @@ void filter_table_update (
 
 void accumulation_table_access (
     SMS* sms, 
-    Cache* cache,
     Op* op, 
     Addr line_addr
 ) {
@@ -387,7 +472,7 @@ void accumulation_table_access (
                                                 sms,
                                                 line_addr
                                             ); 
-    
+    /* Index variable - used to index tables */
     TableIndex table_index = get_table_index (
                                 sms,
                                 op,
@@ -413,11 +498,14 @@ void accumulation_table_access (
             "Table. Now checking the filter table...",
             hexstr64s(table_index);
         );
+
         filter_table_access(
             sms, 
             op, 
             line_addr
         );
+
+        //! Todo: Add stat counter.
 	}
 
 	// 2b. If entry does exist in accumulation table, then
@@ -506,15 +594,20 @@ void accumulation_table_update (
         // 1b. Store the access pattern in the Accumulation 
         //  Table.
         *ret_data = line_addr_access_pattern;
+
+        //! Todo: Add stat counter.
     }
 
     // 2. Else, the same region has been accessed. 
     //  Therefore, do nothing.
+    else {
+        //! Todo: Add stat counter.
+    }
 
     return;
 }
 
-void accumulation_table_transfer (
+Flag accumulation_table_transfer (
     SMS* sms, 
     TableIndex table_index
 ) {
@@ -539,7 +632,7 @@ void accumulation_table_transfer (
             hexstr64s(table_index)
         );
 
-        return; 
+        return FALSE; 
     }
 
     // 2b. Add entry to the Pattern History Table.
@@ -551,7 +644,10 @@ void accumulation_table_transfer (
     );
 
     // 3. Delete the entry from the Accumulation Table.
-    hash_table_access_delete(accumulation_table, table_index);
+    hash_table_access_delete(
+        accumulation_table, 
+        table_index
+    );
 
     DEBUG(
         "SMS Accumulation Table transfer: "
@@ -561,24 +657,14 @@ void accumulation_table_transfer (
         hexstr64s(table_index)
     );
 
-    return;
+    return TRUE;
 }
 
 
 /* Pattern History Table */
 
-void pattern_history_table_access (
-    SMS* sms
-) {
-    SmsCache pht = (*sms).pattern_history_table;
-
-    //! Todo: Write function logic.
-
-    return;
-}
-
 void pattern_history_table_insert (
-    Cache* pattern_history_table,
+    SmsCache* pattern_history_table,
     Dcache_Stage* dcache_stage,
     TableIndex table_index, 
         // Assume this is calculated by caller.
@@ -594,15 +680,16 @@ void pattern_history_table_insert (
 
     // 2. Index cache to insert the access pattern in the 
     //  correct set.
-    AccessPattern *evicted_entry_access_pattern = NULL; 
-            // Pointer to cache entry that is getting replaced.
+    AccessPattern evicted_entry_access_pattern = 0; 
+            // Stores the data of the cache entry that 
+            // was replaced.
     cache_insert(
         pattern_history_table,
         (*dcache_stage).proc_id, 
             // Identifies the processor ID for a multi-core CPU.
         table_index, 
         new_entry_access_pattern,
-        evicted_entry_access_pattern
+        &evicted_entry_access_pattern
     );
 
     DEBUG(
@@ -614,15 +701,22 @@ void pattern_history_table_insert (
 
     // 3. Check if the line we just replaced has the same data.
     //  This will be used for a graph in our final lab report.
-    if (evicted_entry_access_pattern != NULL) {
+    //  Remember the Pattern History Table is set-associative, 
+    //  so only entries with the same Tag will be grouped 
+    //  together.
+    if (evicted_entry_access_pattern != 0) {
         if (*new_entry_access_pattern == *evicted_entry_access_pattern) { 
             //! Todo: Increment counters
         }
         else { 
             //! Todo: Increment counters
         }
-    }
+    } 
 
+    // 4. Else no line was evicted from the cache.
+    else {
+        //! Todo: Increment counters
+    }
 
     return;
 }
@@ -634,14 +728,14 @@ void pattern_history_table_lookup (
 ) {
     /* Table references */
 	SmsCache* pattern_history_table = (*sms).pattern_history_table;
-    SmsCache* dcache =(*(*sms).dcache_stage).dcache;
+    Cache* dcache =(*(*sms).dcache_stage).dcache;
     /* Instruction access pattern - reveals blocks accessed 
         by line_data */
     AccessPattern line_addr_access_pattern = line_address_access_pattern (
                                                 sms,
                                                 line_addr
                                             ); 
-    
+    /* Index variable - used to index tables */
     TableIndex table_index = get_table_index (
                                 sms,
                                 op,
@@ -719,9 +813,6 @@ void pattern_history_table_lookup (
     // 4. Add entry to the Filter Table. This happens 
     //  no matter what. We want to track this new 
     //  interval's access pattern.
-
-    //! Todo (Optional): Instead call this logic at each 
-    //! data cache access occurrence (in dcache_stage.c)?
     filter_table_access(
         sms, 
         dcache, 

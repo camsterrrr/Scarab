@@ -177,6 +177,44 @@ void sms_stream_blocks_to_data_cache (
 );
 
 /**
+ * This function is used to check if a PC+line index 
+ *  exists in either the Filter Table or the 
+ *  Accumulation Table. If it exists in either return
+ *  True, else return False.
+ * 
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param op Pointer to object containing metadata about the
+ *  current instruction being executed.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
+ */
+Flag check_entry_active_generation_table (
+    SMS* sms,
+    Op* op,
+    Addr line_addr
+);
+
+/**
+ * This function is used to delete a PC+line index 
+ *  from the Filter Table or the Accumulation Table. If 
+ *  it is deleted from either table return True, else 
+ *  return False.
+ * 
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param op Pointer to object containing metadata about the
+ *  current instruction being executed.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
+ */
+Flag delete_entry_active_generation_table (
+    SMS* sms,
+    Op* op,
+    Addr line_addr
+);
+
+/**
  * This function calculates the index value used to search
  *  the Filter and Accumulaton Table. For now, it just 
  *  calculates the pc + line address offset bits, as this
@@ -338,16 +376,13 @@ void filter_table_update (
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
- * @param cache Pointer to object maintaining the L1 data 
- *  cache, used to quickly access metadata. 
  * @param op Pointer to object containing metadata about the
  *  current instruction being executed.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
 void accumulation_table_access (
-    SMS* sms, 
-    Cache* cache,
+    SMS* sms,
     Op* op, 
     Addr line_addr
 );
@@ -429,20 +464,13 @@ void accumulation_table_update (
  *  tables and metadata.
  * @param table_index Computed table index (PC+offset).
  */
-void accumulation_table_transfer (
+Flag accumulation_table_transfer (
     SMS* sms, 
     TableIndex table_index
 );
 
 
 /* Pattern History Table */
-
-/**
- * ! Todo: Not sure what this will do quite yet...
- */
-void pattern_history_table_access (
-    SMS* sms
-);
 
 /**
  * The purpose of this function is to insert a entry 
@@ -459,7 +487,7 @@ void pattern_history_table_access (
  *  the region.
  */
 void pattern_history_table_insert (
-    Cache* pattern_history_table,
+    SmsCache* pattern_history_table,
     Dcache_Stage* dcache_stage,
     TableIndex table_index, // Assume this is calculated by caller.
     AccessPattern memory_region_access_pattern
