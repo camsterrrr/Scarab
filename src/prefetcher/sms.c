@@ -940,18 +940,24 @@ void pattern_history_table_lookup (
     //  array.
     uns used_elements = 0;
 
-    //? Do I need to call cache_access? Or is checking
-    //? the valid bit good enough?
-    for (int i = 0; i < (*dcache).assoc; i++) {
-        Cache_Entry *cache_entry = &(*pattern_history_table).entries[table_index][i];
-            //? Todo: How to enable table_index lookup, 
-            //? instead of set lookup?
-            //! Todo: Review this question with TA.
+    Addr temp_line_addr = line_addr;
+    Mask tag;
+        // The tag part of the address, used to distinguish 
+        //  between different memory blocks that map to the 
+        //  same set.
+    uns set = cache_index(
+                    pattern_history_table, 
+                    temp_line_addr, 
+                    &tag, 
+                    &temp_line_addr
+                );
+        // The set index are used to signify which set in 
+        //  the cache this address maps to.
 
-        if (
-            (*cache_entry).tag == table_index
-            && (*cache_entry).valid == 1
-        ) {
+    for (int i = 0; i < (*dcache).assoc; i++) {
+        Cache_Entry *cache_entry = &(*pattern_history_table).entries[set][i];
+
+        if ((*cache_entry).valid == 1) {
             (*cache_entry).last_access_time = sim_time;
             set_entries_access_patterns[i] = (*cache_entry).data;
             used_elements++;
@@ -965,7 +971,7 @@ void pattern_history_table_lookup (
             
             STAT_EVENT(
                 op->proc_id, 
-                PATTERN_HISTORY_TABLE_NULL_CACHE_ENTRY
+                PATTERN_HISTORY_TABLE_INSERT_FAILED
             );
         }
     }
@@ -1013,6 +1019,7 @@ void pattern_history_table_lookup (
     // 4. Stream the regions of memory to the Dcache.
     sms_stream_blocks_to_data_cache (
         sms,
+        op,
         table_index,
         line_addr,
         set_merged_access_pattern
@@ -1045,6 +1052,7 @@ void pattern_history_table_lookup (
 
 void sms_stream_blocks_to_data_cache (
     SMS* sms,
+    Op* op,
     TableIndex table_index,
     Addr line_addr,
     AccessPattern set_merged_access_pattern

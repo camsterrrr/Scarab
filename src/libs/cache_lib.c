@@ -76,9 +76,18 @@ static inline uns cache_index(Cache* cache, Addr addr, Addr* tag,
   if (cache->tag_incl_offset) {
     *tag = addr & ~(cache->set_mask << cache->shift_bits);
     *line_addr = addr; // When the tag incl offset, cache is BYTE-addressable
+    STAT_EVENT(
+        op->proc_id, 
+        PATTERN_HISTORY_TABLE_INSERT_FAILED
+    );
   } else {
     *tag = addr >> cache->shift_bits & cache->tag_mask;
     *line_addr = addr & ~cache->offset_mask;
+
+    STAT_EVENT(
+        op->proc_id, 
+        PATTERN_HISTORY_TABLE_INSERT_FAILED
+    );
   }
   return addr >> cache->shift_bits & cache->set_mask;
 }

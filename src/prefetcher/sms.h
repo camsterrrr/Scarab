@@ -248,7 +248,12 @@ AccessPattern line_address_access_pattern (
 );
 
 /**
- * 
+ * This function is called whenever the Dcache stage 
+ *  performs a dcache access. It is used to update 
+ *  the Accumulation Table or Filter Table entries. If
+ *  a cache entry doesn't exist in either table, we 
+ *  call the Pattern History Table logic and stream 
+ *  cache blocks to the Dcache.
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
@@ -257,14 +262,21 @@ AccessPattern line_address_access_pattern (
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
-void sms_dcache_insert (
+void sms_dcache_access (
     SMS* sms,
     Op* op,
     Addr line_addr
 );
 
 /**
- * 
+ * This function is called whenever the Dcache stage
+ *  performs a cache insert. We check to see if the 
+ *  line being inserted is in the Accumulation Table. 
+ *  If it is, we transfer it to the Pattern History 
+ *  Table. If it isn't, we invalidate it in the Filter
+ *  Table and move on.
+ * Note that a cache entry being evicted from the Dcache
+ *  signals the end of that spatial region generation.
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
@@ -560,21 +572,31 @@ void pattern_history_table_lookup (
 );
 
 
-/* Prediction Register */
-
-/**
- * ! Todo: Not sure what this will do quite yet...
- */
-void prediction_register_prefetch ();
-
-
 /* Prefetch Queue */
 
 /**
+ * This function is used to "stream" cache blocks to 
+ *  the data cache. It works by taking the access 
+ *  pattern that was stored in the Pattern History
+ *  Table and isolating each cache block that was 
+ *  accessed. Once each block address is isolated,
+ *  we stream the blocks to the Dcahce.
  * 
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param op Pointer to object containing metadata about the
+ *  current instruction being executed.
+ * @param table_index Computed table index (PC+offset).
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
+ * @param memory_region_access_pattern Stores the combined
+ *  access patterns of all regions stored in the Pattern
+ *  History Table. All access patterns are |'d together 
+ *  into one bit map.
  */
 void sms_stream_blocks_to_data_cache (
     SMS* sms,
+    Op* op,
     TableIndex table_index,
     Addr line_addr,
     AccessPattern set_merged_access_pattern
