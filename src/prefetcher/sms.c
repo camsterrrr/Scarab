@@ -21,13 +21,16 @@
 /* Function definitions */
 /**************************************************************************************/
 
-
 /* Initialize Structures */
 
 SMS* sms_init (
     Dcache_Stage* dcache_stage
 ) {
     SMS* sms = (SMS*) malloc(sizeof(SMS));
+    (*sms).op_sms_dcache_insert = (Op*) malloc(sizeof(Op));
+        // This value is a quick hack so that the 
+        //  sms_dcache_insert can access the program 
+        //  counter information
     (*sms).dcache_stage = dcache_stage;
     (*sms).accumulation_table = (SmsHashTable*) malloc(sizeof(SmsHashTable));
     (*sms).filter_table = (SmsHashTable*) malloc(sizeof(SmsHashTable));
@@ -158,6 +161,7 @@ uns cache_index(
 Flag check_entry_active_generation_table (
     SMS* sms,
     Op* op,
+    uns8 proc_id,
     Addr line_addr
 ) {
 
@@ -165,6 +169,7 @@ Flag check_entry_active_generation_table (
     TableIndex table_index = get_table_index (
                                 sms,
                                 op,
+                                proc_id,
                                 line_addr
                             );
 
@@ -190,6 +195,7 @@ Flag check_entry_active_generation_table (
 Flag delete_entry_active_generation_table (
     SMS* sms,
     Op* op,
+    uns8 proc_id,
     Addr line_addr
 ) {
 
@@ -197,6 +203,7 @@ Flag delete_entry_active_generation_table (
     TableIndex table_index = get_table_index (
                                 sms,
                                 op,
+                                proc_id,
                                 line_addr
                             );
 
@@ -205,7 +212,7 @@ Flag delete_entry_active_generation_table (
     //  remove the entry from the Accumulation Table.
     Flag accumulation_table_flag = accumulation_table_transfer (
                                     sms, 
-                                    op,
+                                    proc_id,
                                     table_index
                                 );
 
@@ -223,7 +230,7 @@ Flag delete_entry_active_generation_table (
     //  what occurred.
     else {
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             ENTRY_TRANSFERRED_FROM_ACCUMULATION_TABLE
         );
     }
@@ -237,6 +244,7 @@ Flag delete_entry_active_generation_table (
 TableIndex get_table_index (
     SMS* sms,
     Op* op,
+    uns8 proc_id,
     Addr line_addr
 ) {
     Addr pc = (*(*op).inst_info).addr; // program counter (PC)
@@ -252,7 +260,7 @@ TableIndex get_table_index (
 
 AccessPattern line_address_access_pattern (
     SMS* sms,
-    Op* op,
+    uns8 proc_id,
     Addr line_addr
 ) {
     uns64 spatial_region_size = (*(*sms).pattern_history_table).line_size;
@@ -301,7 +309,7 @@ AccessPattern line_address_access_pattern (
     else {
         
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             ACCESS_PATTERN_BLOCK_INDEX_OVER_SPATIAL_PATTERN_LIMIT
         );
     }
@@ -310,7 +318,7 @@ AccessPattern line_address_access_pattern (
     //  worked.
     if (extracted_line_addr_access_pattern == 1) {
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             ACCESS_PATTERN_FIRST_REGION_ACCESSED
         );
     }
@@ -321,6 +329,7 @@ AccessPattern line_address_access_pattern (
 void sms_dcache_access (
     SMS* sms,
     Op* op,
+    uns8 proc_id,
     Addr line_addr
 ) {
     // 1. Check if there is an entry already
@@ -329,6 +338,7 @@ void sms_dcache_access (
     Flag flag = check_entry_active_generation_table(
                     sms,
                     op,
+                    proc_id,
                     line_addr
                 );
 
@@ -340,11 +350,12 @@ void sms_dcache_access (
         accumulation_table_access (
             sms,
             op,
+            proc_id,
             line_addr
         );
 
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             ACCUMULATION_TABLE_ACCESS
         );
     }
@@ -358,34 +369,37 @@ void sms_dcache_access (
         pattern_history_table_lookup (
             sms, 
             op,
+            proc_id,
             line_addr
         );
 
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             PATTERN_HISTORY_TABLE_LOOKUP
         );
     }
+
+    return;
 }
 
 void sms_dcache_insert (
     SMS* sms,
-    Op* op,
+    uns8 proc_id,
     Addr line_addr,
     Addr repl_line_addr
 ) {
-     // 1. Check if a cache entry was evicted 
+    // 1. Check if a cache entry was evicted 
     //	from the data cache.
     if (repl_line_addr == 0) {
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             CACHE_INSERT_NO_REPLACEMENT
         );
     }
 
     else {
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             CACHE_INSERT_ENTRY_REPLACED
         );
     }
@@ -395,13 +409,14 @@ void sms_dcache_insert (
     //	Accumulation Table. If so, delete it.
     Flag flag = delete_entry_active_generation_table (
                     sms,
-                    op,
+                    (*sms).op_sms_dcache_insert,
+                    proc_id,
                     line_addr
                 );
 
     if (flag) {
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             ENTRY_DELETED_FROM_ACTIVE_GENERATION_TABLE
         );
     } 
@@ -409,10 +424,12 @@ void sms_dcache_insert (
     // 3. Else do nothing.
     else {
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             ENTRY_NOT_FOUND_IN_ACTIVE_GENERATION_TABLE
         );
     }
+
+    return; 
 }
 
 Flag table_check (
@@ -437,6 +454,7 @@ Flag table_check (
 void filter_table_access (
     SMS* sms,
     Op* op,
+    uns8 proc_id,
     Addr line_addr
 ) {
     /* Filter Table reference */
@@ -445,13 +463,14 @@ void filter_table_access (
         by line_data */
     AccessPattern line_addr_access_pattern = line_address_access_pattern (
                                                 sms,
-                                                op,
+                                                proc_id,
                                                 line_addr
                                             ); 
     /* Index variable - used to index tables */
     TableIndex table_index = get_table_index (
                                 sms,
                                 op,
+                                proc_id,
                                 line_addr
                             );
         // pc + line address offset bits
@@ -481,7 +500,7 @@ void filter_table_access (
         );
 
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             FILTER_TABLE_INSERT
         );
 	}
@@ -503,14 +522,14 @@ void filter_table_access (
         filter_table_update(
             filter_table,
             (*sms).accumulation_table,
-            op,
+            proc_id,
             table_index,
             line_addr_access_pattern,
             memory_region_access_pattern
         );
 
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             FILTER_TABLE_UPDATE_CALLED
         );
     }
@@ -555,7 +574,7 @@ void filter_table_insert (
 void filter_table_update (
     SmsHashTable* filter_table, 
     SmsHashTable* accumulation_table, 
-    Op* op,
+    uns8 proc_id,
     TableIndex table_index,
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern
@@ -580,7 +599,7 @@ void filter_table_update (
         //  table.
         accumulation_table_insert (
             accumulation_table,
-            op,
+            proc_id,
             table_index,
             line_addr_access_pattern,
             memory_region_access_pattern
@@ -590,11 +609,11 @@ void filter_table_update (
         hash_table_access_delete(filter_table, table_index);
 
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             ACCUMULATION_TABLE_INSERT
         );
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             FILTER_TABLE_TRANSFER
         );
     }
@@ -610,7 +629,7 @@ void filter_table_update (
         );
 
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             FILTER_TABLE_NO_UPDATE
         );
     }
@@ -623,7 +642,8 @@ void filter_table_update (
 
 void accumulation_table_access (
     SMS* sms, 
-    Op* op, 
+    Op* op,
+    uns8 proc_id, 
     Addr line_addr
 ) {
     /* Table references */
@@ -632,13 +652,14 @@ void accumulation_table_access (
         by line_data */
     AccessPattern line_addr_access_pattern = line_address_access_pattern (
                                                 sms,
-                                                op,
+                                                proc_id,
                                                 line_addr
                                             ); 
     /* Index variable - used to index tables */
     TableIndex table_index = get_table_index (
                                 sms,
                                 op,
+                                proc_id,
                                 line_addr
                             );
         // pc + line address offset bits
@@ -664,22 +685,23 @@ void accumulation_table_access (
 
         filter_table_access(
             sms, 
-            op, 
+            op,
+            proc_id, 
             line_addr
         );
 
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             FILTER_TABLE_INSERT
         );
 
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             FILTER_TABLE_ACCESS
         );
         
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             ENTRY_NOT_IN_ACCUMULATION
         );
 	}
@@ -693,7 +715,7 @@ void accumulation_table_access (
 
         accumulation_table_update(
             accumulation_table,
-            op,
+            proc_id,
             table_index,
             line_addr_access_pattern,
             memory_region_access_pattern,
@@ -716,7 +738,7 @@ Flag accumulation_table_check (
 
 void accumulation_table_insert (
     SmsHashTable* accumulation_table,
-    Op* op,
+    uns8 proc_id,
     TableIndex table_index,
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern
@@ -750,7 +772,7 @@ void accumulation_table_insert (
 
 void accumulation_table_update (
     SmsHashTable* accumulation_table, 
-    Op* op,
+    uns8 proc_id,
     TableIndex table_index,
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern,
@@ -776,7 +798,7 @@ void accumulation_table_update (
         *ret_data = line_addr_access_pattern;
 
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             ACCUMULATION_TABLE_UPDATE
         );
     }
@@ -785,7 +807,7 @@ void accumulation_table_update (
     //  Therefore, do nothing.
     else {
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             ACCUMULATION_TABLE_NO_UPDATE
         );
     }
@@ -795,7 +817,7 @@ void accumulation_table_update (
 
 Flag accumulation_table_transfer (
     SMS* sms, 
-    Op* op,
+    uns8 proc_id,
     TableIndex table_index
 ) {
     SmsHashTable* accumulation_table = (*sms).accumulation_table;
@@ -820,7 +842,7 @@ Flag accumulation_table_transfer (
         );
 
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             ACCUMULATION_TABLE_TRANSFER_FAILED
         );
 
@@ -831,7 +853,7 @@ Flag accumulation_table_transfer (
     pattern_history_table_insert(
         (*sms).pattern_history_table,
         (*sms).dcache_stage,
-        op,
+        proc_id,
         table_index,
         *ret_data
     );
@@ -851,7 +873,7 @@ Flag accumulation_table_transfer (
     );
 
     STAT_EVENT(
-        op->proc_id, 
+        proc_id, 
         ACCUMULATION_TABLE_TRANSFER
     );
 
@@ -864,7 +886,7 @@ Flag accumulation_table_transfer (
 void pattern_history_table_insert (
     SmsCache* pattern_history_table,
     Dcache_Stage* dcache_stage,
-    Op* op,
+    uns8 proc_id,
     TableIndex table_index, 
         // Assume this is calculated by caller.
     AccessPattern memory_region_access_pattern
@@ -906,13 +928,13 @@ void pattern_history_table_insert (
     if (evicted_entry_access_pattern != 0) {
         if (*new_entry_access_pattern == evicted_entry_access_pattern) { 
             STAT_EVENT(
-                op->proc_id, 
+                proc_id, 
                 PATTERN_HISTORY_TABLE_SAME_ENTRY_EVICTED
             );
         }
         else { 
             STAT_EVENT(
-                op->proc_id, 
+                proc_id, 
                 PATTERN_HISTORY_TABLE_DIFFERENT_ENTRY_EVICTED
             );
         }
@@ -921,7 +943,7 @@ void pattern_history_table_insert (
     // 4. Else no line was evicted from the cache.
     else {
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             PATTERN_HISTORY_TABLE_NO_ENTRY_EVICTED
         );
     }
@@ -932,6 +954,7 @@ void pattern_history_table_insert (
 void pattern_history_table_lookup (
     SMS* sms, 
     Op* op,
+    uns8 proc_id,
     Addr line_addr
 ) {
     /* Table references */
@@ -942,6 +965,7 @@ void pattern_history_table_lookup (
     TableIndex table_index = get_table_index (
                                 sms,
                                 op,
+                                proc_id,
                                 line_addr
                             );
         // pc + line address offset bits
@@ -986,14 +1010,14 @@ void pattern_history_table_lookup (
             used_elements++;
 
             STAT_EVENT(
-                op->proc_id, 
+                proc_id, 
                 PATTERN_HISTORY_TABLE_NONNULL_CACHE_ENTRY
             );
         } else {
             set_entries_access_patterns[i] = NULL;
             
             STAT_EVENT(
-                op->proc_id, 
+                proc_id, 
                 PATTERN_HISTORY_TABLE_INSERT_FAILED
             );
         }
@@ -1034,7 +1058,7 @@ void pattern_history_table_lookup (
             "Access pattern was 0!"
         );
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             PATTERN_HISTORY_TABLE_MERGED_ACCESS_PATTERN_ZERO
         );
     }
@@ -1042,7 +1066,7 @@ void pattern_history_table_lookup (
     // 4. Stream the regions of memory to the Dcache.
     sms_stream_blocks_to_data_cache (
         sms,
-        op,
+        proc_id,
         table_index,
         line_addr,
         set_merged_access_pattern
@@ -1053,17 +1077,18 @@ void pattern_history_table_lookup (
     //  interval's access pattern.
     filter_table_access(
         sms, 
-        op, 
+        op,
+        proc_id, 
         line_addr
     );
 
     STAT_EVENT(
-        op->proc_id, 
+        proc_id, 
         FILTER_TABLE_INSERT
     );
 
     STAT_EVENT(
-        op->proc_id, 
+        proc_id, 
         FILTER_TABLE_ACCESS
     );
 
@@ -1075,7 +1100,7 @@ void pattern_history_table_lookup (
 
 void sms_stream_blocks_to_data_cache (
     SMS* sms,
-    Op* op,
+    uns8 proc_id,
     TableIndex table_index,
     Addr line_addr,
     AccessPattern set_merged_access_pattern
@@ -1168,13 +1193,13 @@ void sms_stream_blocks_to_data_cache (
 
         sms_dcache_insert (
             sms,
-            op,
+            proc_id,
             line_addr,
             repl_line_addr
         ); 
 
         STAT_EVENT(
-            op->proc_id, 
+            proc_id, 
             BLOCKS_STREAMED_TO_DCACHE
         );
     }

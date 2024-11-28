@@ -66,6 +66,11 @@ struct SmsPredictionRegister {
  */
 struct Spatial_Memory_Streaming_struct {
 
+    Op* op_sms_dcache_insert;
+        // This value is a quick hack so that the 
+        //  sms_dcache_insert can access the program 
+        //  counter information
+
     /* References to Data Cache */
     Dcache_Stage* dcache_stage;
         // Maintains reference to the Data Cache stage 
@@ -191,12 +196,14 @@ uns cache_index(
  *  tables and metadata.
  * @param op Pointer to object containing metadata about the
  *  current instruction being executed.
+ * @param proc_id ID of processor executing the instruction.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
 Flag check_entry_active_generation_table (
     SMS* sms,
     Op* op,
+    uns8 proc_id,
     Addr line_addr
 );
 
@@ -210,12 +217,14 @@ Flag check_entry_active_generation_table (
  *  tables and metadata.
  * @param op Pointer to object containing metadata about the
  *  current instruction being executed.
+ * @param proc_id ID of processor executing the instruction.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
 Flag delete_entry_active_generation_table (
     SMS* sms,
     Op* op,
+    uns8 proc_id,
     Addr line_addr
 );
 
@@ -230,12 +239,14 @@ Flag delete_entry_active_generation_table (
  *  tables and metadata.
  * @param op Pointer to object containing metadata about the
  *  current instruction being executed.
+ * @param proc_id ID of processor executing the instruction.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
 TableIndex get_table_index (
     SMS* sms,
     Op* op,
+    uns8 proc_id,
     Addr line_addr
 );
 
@@ -249,14 +260,13 @@ TableIndex get_table_index (
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
- * @param op Pointer to object containing metadata about the
- *  current instruction being executed.
+ * @param proc_id ID of processor executing the instruction.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
 AccessPattern line_address_access_pattern (
     SMS* sms,
-    Op* op,
+    uns8 proc_id,
     Addr line_addr
 );
 
@@ -271,13 +281,15 @@ AccessPattern line_address_access_pattern (
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
  * @param op Pointer to object containing metadata about the
- *  current instruction being executed.
+ *  current instruction being executed.ss
+ * @param proc_id ID of processor executing the instruction.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
 void sms_dcache_access (
     SMS* sms,
     Op* op,
+    uns8 proc_id,
     Addr line_addr
 );
 
@@ -293,8 +305,7 @@ void sms_dcache_access (
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
- * @param op Pointer to object containing metadata about the
- *  current instruction being executed.
+ * @param proc_id ID of processor executing the instruction.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  * @param repl_line_addr The data that was evicted from the
@@ -302,7 +313,7 @@ void sms_dcache_access (
  */
 void sms_dcache_insert (
     SMS* sms,
-    Op* op,
+    uns8 proc_id,
     Addr line_addr,
     Addr repl_line_addr
 );
@@ -342,12 +353,14 @@ Flag table_check (
  *  tables and metadata.
  * @param op Pointer to object containing metadata about the
  *  current instruction being executed.
+ * @param proc_id ID of processor executing the instruction.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
 void filter_table_access (
     SMS* sms,
     Op* op,
+    uns8 proc_id,
     Addr line_addr
 );
 
@@ -400,8 +413,7 @@ void filter_table_insert (
  * @param filter_table Pointer to the filter table.
  * @param accumulation_table Pointer to the accumulation 
  *  table.
- * @param op Pointer to object containing metadata about the
- *  current instruction being executed.
+ * @param proc_id ID of processor executing the instruction.
  * @param table_index Computed table index (PC+offset).
  * @param line_addr_access_pattern  Current access 
  *  pattern of the region.
@@ -411,7 +423,7 @@ void filter_table_insert (
 void filter_table_update (
     SmsHashTable* filter_table, 
     SmsHashTable* accumulation_table, 
-    Op* op,
+    uns8 proc_id,
     TableIndex table_index,
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern
@@ -436,12 +448,14 @@ void filter_table_update (
  *  tables and metadata.
  * @param op Pointer to object containing metadata about the
  *  current instruction being executed.
+ * @param proc_id ID of processor executing the instruction.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
 void accumulation_table_access (
     SMS* sms,
-    Op* op, 
+    Op* op,
+    uns8 proc_id, 
     Addr line_addr
 );
 
@@ -473,15 +487,14 @@ Flag accumulation_table_check (
  * 
  * @param accumulation_table Pointer to the Accumulation
  *  Table.
- * @param op Pointer to object containing metadata about the
- *  current instruction being executed.
+ * @param proc_id ID of processor executing the instruction.
  * @param table_index Computed table index (PC+offset).
  * @param line_addr_access_pattern  Current access 
  *  pattern of the region.
  */
 void accumulation_table_insert (
     SmsHashTable* accumulation_table,
-    Op* op,
+    uns8 proc_id,
     TableIndex table_index,
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern
@@ -494,8 +507,7 @@ void accumulation_table_insert (
  * 
  * @param accumulation_table Pointer to the accumulation 
  *  table.
- * @param op Pointer to object containing metadata about the
- *  current instruction being executed.
+ * @param proc_id ID of processor executing the instruction.
  * @param table_index Computed table index (PC+offset).
  * @param line_addr_access_pattern  Current access 
  *  pattern of the region.
@@ -506,7 +518,7 @@ void accumulation_table_insert (
  */
 void accumulation_table_update (
     SmsHashTable* accumulation_table, 
-    Op* op,
+    uns8 proc_id,
     TableIndex table_index,
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern,
@@ -526,13 +538,12 @@ void accumulation_table_update (
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
- * @param op Pointer to object containing metadata about the
- *  current instruction being executed.
+ * @param proc_id ID of processor executing the instruction.
  * @param table_index Computed table index (PC+offset).
  */
 Flag accumulation_table_transfer (
     SMS* sms, 
-    Op* op,
+    uns8 proc_id,
     TableIndex table_index
 );
 
@@ -549,8 +560,7 @@ Flag accumulation_table_transfer (
  * @param dcache_stage Pointer to object maintaining 
  *  references for useful data cache stage and data cache 
  *  metadata.
- * @param op Pointer to object containing metadata about the
- *  current instruction being executed.
+ * @param proc_id ID of processor executing the instruction.
  * @param table_index Computed table index (PC+offset).
  * @param memory_region_access_pattern Access pattern of 
  *  the region.
@@ -558,7 +568,7 @@ Flag accumulation_table_transfer (
 void pattern_history_table_insert (
     SmsCache* pattern_history_table,
     Dcache_Stage* dcache_stage,
-    Op* op,
+    uns8 proc_id,
     TableIndex table_index, // Assume this is calculated by caller.
     AccessPattern memory_region_access_pattern
 );
@@ -575,12 +585,14 @@ void pattern_history_table_insert (
  *  tables and metadata.
  * @param op Pointer to object containing metadata about the
  *  current instruction being executed.
+ * @param proc_id ID of processor executing the instruction.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
 void pattern_history_table_lookup (
     SMS* sms, 
     Op* op,
+    uns8 proc_id,
     Addr line_addr
 );
 
@@ -597,8 +609,7 @@ void pattern_history_table_lookup (
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
- * @param op Pointer to object containing metadata about the
- *  current instruction being executed.
+ * @param proc_id ID of processor executing the instruction.
  * @param table_index Computed table index (PC+offset).
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
@@ -609,7 +620,7 @@ void pattern_history_table_lookup (
  */
 void sms_stream_blocks_to_data_cache (
     SMS* sms,
-    Op* op,
+    uns8 proc_id,
     TableIndex table_index,
     Addr line_addr,
     AccessPattern set_merged_access_pattern
