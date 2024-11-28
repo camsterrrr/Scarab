@@ -164,6 +164,10 @@ Flag check_entry_active_generation_table (
     uns8 proc_id,
     Addr line_addr
 ) {
+    STAT_EVENT(
+        proc_id, 
+        CHECK_ENTRY_ACTIVE_GENERATION_TABLE
+    );
 
     /* Index variable - used to index tables */
     TableIndex table_index = get_table_index (
@@ -175,15 +179,17 @@ Flag check_entry_active_generation_table (
 
     AccessPattern* accumulation_table_data = NULL;
     Flag accumulation_table_flag = accumulation_table_check (
-                    (*sms).accumulation_table, 
-                    table_index, 
-                    accumulation_table_data
-                );
+                                        (*sms).accumulation_table, 
+                                        proc_id,
+                                        table_index, 
+                                        accumulation_table_data
+                                    );
 
     // 1. Check if memory region is already in the Filter Table.
     AccessPattern* filter_table_data = NULL;
     Flag filter_table_flag = filter_table_check (
                                 (*sms).filter_table, 
+                                proc_id,
                                 table_index, 
                                 filter_table_data
                             );
@@ -198,6 +204,10 @@ Flag delete_entry_active_generation_table (
     uns8 proc_id,
     Addr line_addr
 ) {
+    STAT_EVENT(
+        proc_id, 
+        DELETE_ENTRY_ACTIVE_TABLE_GENERATION
+    );
 
     /* Index variable - used to index tables */
     TableIndex table_index = get_table_index (
@@ -247,6 +257,11 @@ TableIndex get_table_index (
     uns8 proc_id,
     Addr line_addr
 ) {
+    STAT_EVENT(
+        proc_id, 
+        GET_TABLE_INDEX
+    );
+
     Addr pc = (*(*op).inst_info).addr; // program counter (PC)
     Mask cache_offset_mask = (*(*sms).dcache_stage).dcache.offset_mask;
     SmsAddr line_addr_offset_bits = line_addr & cache_offset_mask; 
@@ -332,6 +347,11 @@ void sms_dcache_access (
     uns8 proc_id,
     Addr line_addr
 ) {
+    STAT_EVENT(
+        proc_id, 
+        SMS_DCACHE_ACCESS
+    );
+
     // 1. Check if there is an entry already
     //	in the Filter Table or the Accumulation 
     //	Table.
@@ -353,11 +373,6 @@ void sms_dcache_access (
             proc_id,
             line_addr
         );
-
-        STAT_EVENT(
-            proc_id, 
-            ACCUMULATION_TABLE_ACCESS
-        );
     }
 
     // 3. If there is NOT an entry associated 
@@ -372,11 +387,6 @@ void sms_dcache_access (
             proc_id,
             line_addr
         );
-
-        STAT_EVENT(
-            proc_id, 
-            PATTERN_HISTORY_TABLE_LOOKUP
-        );
     }
 
     return;
@@ -388,6 +398,11 @@ void sms_dcache_insert (
     Addr line_addr,
     Addr repl_line_addr
 ) {
+    STAT_EVENT(
+        proc_id, 
+        SMS_DCACHE_INSERT
+    );
+
     // 1. Check if a cache entry was evicted 
     //	from the data cache.
     if (repl_line_addr == 0) {
@@ -407,7 +422,7 @@ void sms_dcache_insert (
     // 2. If cache entry was evicted, check if 
     //	it exists in either the Filter Table or 
     //	Accumulation Table. If so, delete it.
-    Flag flag = delete_entry_active_generation_table (
+    Flag flag = check_entry_active_generation_table (
                     sms,
                     (*sms).op_sms_dcache_insert,
                     proc_id,
@@ -418,6 +433,12 @@ void sms_dcache_insert (
         STAT_EVENT(
             proc_id, 
             ENTRY_DELETED_FROM_ACTIVE_GENERATION_TABLE
+        );
+        delete_entry_active_generation_table (
+            sms,
+            (*sms).op_sms_dcache_insert,
+            proc_id,
+            line_addr
         );
     } 
 
@@ -434,9 +455,15 @@ void sms_dcache_insert (
 
 Flag table_check (
     SmsHashTable* table, 
+    uns8 proc_id,
     TableIndex table_index, 
     AccessPattern* ret_data
 ) {
+    STAT_EVENT(
+        proc_id, 
+        TABLE_CHECK
+    );
+
     Flag flag;
 
 	ret_data = (AccessPattern*) hash_table_access(
@@ -457,6 +484,11 @@ void filter_table_access (
     uns8 proc_id,
     Addr line_addr
 ) {
+    STAT_EVENT(
+        proc_id, 
+        FILTER_TABLE_ACCESS
+    );
+
     /* Filter Table reference */
     SmsHashTable* filter_table = (*sms).filter_table;
     /* Instruction access pattern - reveals blocks accessed 
@@ -479,6 +511,7 @@ void filter_table_access (
     AccessPattern* ret_line_data = NULL;
     Flag flag = filter_table_check (
                     filter_table, 
+                    proc_id,
                     table_index, 
                     ret_line_data
                 );
@@ -495,13 +528,9 @@ void filter_table_access (
 
         filter_table_insert (
             filter_table, 
+            proc_id,
             table_index, 
             line_addr_access_pattern
-        );
-
-        STAT_EVENT(
-            proc_id, 
-            FILTER_TABLE_INSERT
         );
 	}
 
@@ -527,11 +556,6 @@ void filter_table_access (
             line_addr_access_pattern,
             memory_region_access_pattern
         );
-
-        STAT_EVENT(
-            proc_id, 
-            FILTER_TABLE_UPDATE_CALLED
-        );
     }
 
     return;
@@ -539,19 +563,34 @@ void filter_table_access (
 
 Flag filter_table_check (
     SmsHashTable* filter_table, 
+    uns8 proc_id,
     TableIndex table_index, 
     AccessPattern* ret_data
 ) {
+    STAT_EVENT(
+        proc_id, 
+        FILTER_TABLE_CHECK
+    );
 
-	return table_check (filter_table, table_index, ret_data);
+	return table_check (
+                filter_table, proc_id, 
+                table_index, 
+                ret_data
+            );
 
 }
 
 void filter_table_insert (
     SmsHashTable* filter_table, 
+    uns8 proc_id,
     TableIndex table_index, 
     AccessPattern line_addr_access_pattern
 ) {
+    STAT_EVENT(
+        proc_id, 
+        FILTER_TABLE_INSERT
+    );
+
     // Note that in filter_table_access we checked to see 
     //  if a entry already existed. If this function is 
     //  called we can assume that an entry doesn't exist.
@@ -579,6 +618,11 @@ void filter_table_update (
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern
 ) {
+    STAT_EVENT(
+        proc_id, 
+        FILTER_TABLE_UPDATE
+    );
+
     // 1. Check if line address is referencing a unique
     //	region of memory. Remember, the filter table is 
     // 	only storing references to regions of memory that
@@ -646,6 +690,11 @@ void accumulation_table_access (
     uns8 proc_id, 
     Addr line_addr
 ) {
+    STAT_EVENT(
+        proc_id, 
+        ACCUMULATION_TABLE_ACCESS
+    );
+
     /* Table references */
 	SmsHashTable* accumulation_table = (*sms).accumulation_table;
     /* Instruction access pattern - reveals blocks accessed 
@@ -669,6 +718,7 @@ void accumulation_table_access (
     AccessPattern* ret_line_data = NULL;
     Flag flag = accumulation_table_check (
                     accumulation_table, 
+                    proc_id,
                     table_index, 
                     ret_line_data
                 );
@@ -688,16 +738,6 @@ void accumulation_table_access (
             op,
             proc_id, 
             line_addr
-        );
-
-        STAT_EVENT(
-            proc_id, 
-            FILTER_TABLE_INSERT
-        );
-
-        STAT_EVENT(
-            proc_id, 
-            FILTER_TABLE_ACCESS
         );
         
         STAT_EVENT(
@@ -728,11 +768,21 @@ void accumulation_table_access (
 
 Flag accumulation_table_check (
     SmsHashTable* accumulation_table, 
+    uns8 proc_id,
     TableIndex table_index, 
     AccessPattern* ret_data
 ) {
+    STAT_EVENT(
+        proc_id, 
+        ACCUMULATION_TABLE_CHECK
+    );
 
-	return table_check (accumulation_table, table_index, ret_data);
+	return table_check (
+                accumulation_table, 
+                proc_id, 
+                table_index, 
+                ret_data
+            );
 
 }
 
@@ -743,6 +793,11 @@ void accumulation_table_insert (
     AccessPattern line_addr_access_pattern,
     AccessPattern memory_region_access_pattern
 ) {
+    STAT_EVENT(
+        proc_id, 
+        ACCUMULATION_TABLE_INSERT
+    );
+
     //1.Create new key-value mapping in the Accumulation
     //  Table.
     Flag* new_entry = NULL;
@@ -778,6 +833,11 @@ void accumulation_table_update (
     AccessPattern memory_region_access_pattern,
     AccessPattern* ret_data
 ) {
+    STAT_EVENT(
+        proc_id, 
+        ACCUMULATION_TABLE_UPDATE
+    );
+
     // 1. Check if line address is referencing a unique
     //	region of memory. 
     if (
@@ -799,7 +859,7 @@ void accumulation_table_update (
 
         STAT_EVENT(
             proc_id, 
-            ACCUMULATION_TABLE_UPDATE
+            ACCUMULATION_TABLE_UPDATE_ACCESS_PATTERN_UPDATE
         );
     }
 
@@ -820,16 +880,22 @@ Flag accumulation_table_transfer (
     uns8 proc_id,
     TableIndex table_index
 ) {
+    STAT_EVENT(
+        proc_id, 
+        ACCUMULATION_TABLE_TRANSFER
+    );
+
     SmsHashTable* accumulation_table = (*sms).accumulation_table;
 
     // 1. Check that the table index exists in the
     //  Accumulation Table.
     AccessPattern* ret_data = NULL;
     Flag flag = accumulation_table_check(
-        accumulation_table,
-        table_index,
-        ret_data
-    );
+                    accumulation_table,
+                    proc_id,
+                    table_index,
+                    ret_data
+                );
 
     // 2a. If entry doesn't exist in Accumulation Table, 
     //  then do nothing.
@@ -872,11 +938,6 @@ Flag accumulation_table_transfer (
         hexstr64s(table_index)
     );
 
-    STAT_EVENT(
-        proc_id, 
-        ACCUMULATION_TABLE_TRANSFER
-    );
-
     return TRUE;
 }
 
@@ -891,6 +952,10 @@ void pattern_history_table_insert (
         // Assume this is calculated by caller.
     AccessPattern memory_region_access_pattern
 ) {
+    STAT_EVENT(
+        proc_id, 
+        PATTERN_HISTORY_TABLE_INSERT
+    );
 
     // 1. Allocate heap memory to store access pattern. 
     //  The cache_entry struct defines the data as an
@@ -957,6 +1022,11 @@ void pattern_history_table_lookup (
     uns8 proc_id,
     Addr line_addr
 ) {
+    STAT_EVENT(
+        proc_id, 
+        PATTERN_HISTORY_TABLE_LOOKUP
+    );
+
     /* Table references */
 	SmsCache* pattern_history_table = (*sms).pattern_history_table;
     Cache* dcache = &(*(*sms).dcache_stage).dcache;
@@ -1031,46 +1101,44 @@ void pattern_history_table_lookup (
         hexstr64s(table_index)
     );
 
-    // End function early if there are no valid cache 
-    //  entries.
-    if (used_elements == 0) { return; }
-
-    // 2. Merge all access patterns to a single variable.
-    AccessPattern set_merged_access_pattern = 0;
-    for (int i = 0; i < (*dcache).assoc; i++) { 
-        if (set_entries_access_patterns[i] != NULL) {
-            set_merged_access_pattern |= *(set_entries_access_patterns[i]);
+    if (used_elements > 0) { 
+        // 2. Merge all access patterns to a single variable.
+        AccessPattern set_merged_access_pattern = 0;
+        for (int i = 0; i < (*dcache).assoc; i++) { 
+            if (set_entries_access_patterns[i] != NULL) {
+                set_merged_access_pattern |= *(set_entries_access_patterns[i]);
+            }
         }
-    }
 
-    // 3. Stream all regions indicated in access pattern 
-    //  to the data cache.
-    DEBUG(
-        "SMS Pattern History Table lookup: "
-        "Streaming regions %s to the data cache.",
-        hexstr64s(set_merged_access_pattern)
-    );
-
-    // Something went wrong.
-    if (set_merged_access_pattern == 0) {
+        // 3. Stream all regions indicated in access pattern 
+        //  to the data cache.
         DEBUG(
             "SMS Pattern History Table lookup: "
-            "Access pattern was 0!"
+            "Streaming regions %s to the data cache.",
+            hexstr64s(set_merged_access_pattern)
         );
-        STAT_EVENT(
-            proc_id, 
-            PATTERN_HISTORY_TABLE_MERGED_ACCESS_PATTERN_ZERO
+
+        // Something went wrong.
+        if (set_merged_access_pattern == 0) {
+            DEBUG(
+                "SMS Pattern History Table lookup: "
+                "Access pattern was 0!"
+            );
+            STAT_EVENT(
+                proc_id, 
+                PATTERN_HISTORY_TABLE_MERGED_ACCESS_PATTERN_ZERO
+            );
+        }
+
+        // 4. Stream the regions of memory to the Dcache.
+        sms_stream_blocks_to_data_cache (
+            sms,
+            proc_id,
+            table_index,
+            line_addr,
+            set_merged_access_pattern
         );
     }
-
-    // 4. Stream the regions of memory to the Dcache.
-    sms_stream_blocks_to_data_cache (
-        sms,
-        proc_id,
-        table_index,
-        line_addr,
-        set_merged_access_pattern
-    );
     
     // 5. Add entry to the Filter Table. This happens 
     //  no matter what. We want to track this new 
@@ -1080,16 +1148,6 @@ void pattern_history_table_lookup (
         op,
         proc_id, 
         line_addr
-    );
-
-    STAT_EVENT(
-        proc_id, 
-        FILTER_TABLE_INSERT
-    );
-
-    STAT_EVENT(
-        proc_id, 
-        FILTER_TABLE_ACCESS
     );
 
     return;
@@ -1105,6 +1163,10 @@ void sms_stream_blocks_to_data_cache (
     Addr line_addr,
     AccessPattern set_merged_access_pattern
 ) { 
+    STAT_EVENT(
+        proc_id, 
+        SMS_STREAM_BLOCKS_TO_DATA_CACHE
+    );
 
     // 1. Calculate the region's base address
     Mask sms_offset_mask = (*(*sms).pattern_history_table).offset_mask;

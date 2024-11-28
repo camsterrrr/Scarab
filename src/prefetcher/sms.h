@@ -332,6 +332,7 @@ void sms_dcache_insert (
  */
 Flag table_check (
     SmsHashTable* table, 
+    uns8 proc_id,
     TableIndex table_index, 
     AccessPattern* ret_data
 );
@@ -378,6 +379,7 @@ void filter_table_access (
  */
 Flag filter_table_check (
     SmsHashTable* filter_table, 
+    uns8 proc_id,
     TableIndex table_index, 
     AccessPattern* ret_data
 );
@@ -396,6 +398,7 @@ Flag filter_table_check (
  */
 void filter_table_insert (
     SmsHashTable* filter_table, 
+    uns8 proc_id,
     TableIndex table_index, 
     AccessPattern line_addr_access_pattern
 );
@@ -474,6 +477,7 @@ void accumulation_table_access (
  */
 Flag accumulation_table_check (
     SmsHashTable* accumulation_table, 
+    uns8 proc_id,
     TableIndex table_index, 
     AccessPattern* ret_data
 );
