@@ -166,6 +166,19 @@ void pattern_history_table_init (
 );
 
 
+/* cache_lib.c function */
+
+/**
+ * I copied this function from cache_lib.c.
+ */
+uns cache_index(
+    Cache* cache, 
+    Addr addr, 
+    Addr* tag,
+    Addr* line_addr
+);
+
+
 /* Helper Functions */
 
 /**
@@ -288,10 +301,10 @@ void sms_dcache_access (
  *  Dcache.
  */
 void sms_dcache_insert (
-    sms,
-    op,
-    line_addr,
-    repl_line_addr
+    SMS* sms,
+    Op* op,
+    Addr line_addr,
+    Addr repl_line_addr
 );
 
 /**

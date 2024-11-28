@@ -133,6 +133,26 @@ void pattern_history_table_init (
 }
 
 
+/* cache_lib.c function */
+
+uns cache_index(
+    Cache* cache, 
+    Addr addr, 
+    Addr* tag,
+    Addr* line_addr
+) {
+    if (cache->tag_incl_offset) {
+        *tag = addr & ~(cache->set_mask << cache->shift_bits);
+        *line_addr = addr; // When the tag incl offset, cache is BYTE-addressable
+    } else {
+        *tag = addr >> cache->shift_bits & cache->tag_mask;
+        *line_addr = addr & ~cache->offset_mask;
+    }
+
+    return addr >> cache->shift_bits & cache->set_mask;
+}
+
+
 /* Helper functions */
 
 Flag check_entry_active_generation_table (
@@ -298,7 +318,7 @@ AccessPattern line_address_access_pattern (
     return extracted_line_addr_access_pattern;
 }
 
-void sms_dcache_insert (
+void sms_dcache_access (
     SMS* sms,
     Op* op,
     Addr line_addr
@@ -951,11 +971,14 @@ void pattern_history_table_lookup (
                     &tag, 
                     &temp_line_addr
                 );
-        // The set index are used to signify which set in 
+        // The set bits are used to signify which set in 
         //  the cache this address maps to.
 
     for (int i = 0; i < (*dcache).assoc; i++) {
         Cache_Entry *cache_entry = &(*pattern_history_table).entries[set][i];
+            // I originally used (pc + line address offset)
+            //  to index... Let's just say that didn't work
+            //  as intended...
 
         if ((*cache_entry).valid == 1) {
             (*cache_entry).last_access_time = sim_time;
@@ -1130,12 +1153,12 @@ void sms_stream_blocks_to_data_cache (
     for (uns i = 0; i < num_regions; i++) {
 
         SmsAddr line_addr = prediction_registers[i];
-        SmsAddr repl_line_addr = NULL;
+        SmsAddr repl_line_addr = 0;
 
         Dcache_Data* dcache_line_data = 
                 (Dcache_Data*) cache_insert(
                                     &(*(*sms).dcache_stage).dcache, 
-                                    (*(*sms).dcache_stage).dcache.proc_id, 
+                                    (*(*sms).dcache_stage).proc_id, 
                                     line_addr,
                                     &line_addr, 
                                     &repl_line_addr
@@ -1143,7 +1166,7 @@ void sms_stream_blocks_to_data_cache (
 
         (*dcache_line_data).HW_prefetch = TRUE;
 
-        void sms_dcache_insert (
+        sms_dcache_insert (
             sms,
             op,
             line_addr,

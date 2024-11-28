@@ -449,7 +449,7 @@ void update_dcache_stage(Stage_Data* src_sd) {
 /* SMS */
 /**************************************************************************************/
 
-            void sms_dcache_access (
+            sms_dcache_access (
                 sms,
                 op,
                 line_addr
@@ -521,7 +521,7 @@ void update_dcache_stage(Stage_Data* src_sd) {
 /* SMS */
 /**************************************************************************************/
 
-            void sms_dcache_access (
+            sms_dcache_access (
                 sms,
                 op,
                 line_addr
@@ -597,7 +597,7 @@ void update_dcache_stage(Stage_Data* src_sd) {
 /* SMS */
 /**************************************************************************************/
 
-            void sms_dcache_access (
+            sms_dcache_access (
                 sms,
                 op,
                 line_addr
@@ -780,7 +780,7 @@ Flag dcache_fill_line(Mem_Req* req) {
 /* SMS */
 /**************************************************************************************/
 
-    void sms_dcache_insert (
+    sms_dcache_insert (
         sms,
         op,
         line_addr,
