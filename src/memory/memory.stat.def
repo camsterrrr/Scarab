@@ -3405,3 +3405,16 @@ DEF_STAT(  DATA_LD_PREF_L1_CYCLES_OFFPATH, COUNT , NO_RATIO)
 DEF_STAT(  DATA_LD_PREF_MEM_CYCLES_ONPATH, COUNT , NO_RATIO)
 DEF_STAT(  DATA_LD_PREF_MEM_CYCLES_OFFPATH, COUNT , NO_RATIO)
 
+
+
+/**************************************************************************************/
+/* Lab 2 */
+/**************************************************************************************/
+
+DEF_STAT(DCACHE_MISS_CAPACITY, COUNT, NO_RATIO)
+DEF_STAT(DCACHE_MISS_COMPULSORY, COUNT, NO_RATIO)
+DEF_STAT(DCACHE_MISS_CONFLICT, COUNT, NO_RATIO)
+
+/**************************************************************************************/
+
+

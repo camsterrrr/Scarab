@@ -42,6 +42,15 @@ struct Ports_struct;
 /* Types */
 
 typedef struct Dcache_Stage_struct {
+
+
+
+  // Lab 2: Use separate cache to check conflict and 
+  //  capacity misses.
+  Cache fully_assocaitive_cache;
+
+
+
   uns8       proc_id;
   Stage_Data sd; /* stage interface data */
 

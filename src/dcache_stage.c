@@ -102,6 +102,27 @@ void init_dcache_stage(uns8 proc_id, const char* name) {
   dc->sd.max_op_count = STAGE_MAX_OP_COUNT;
   dc->sd.ops          = (Op**)malloc(sizeof(Op*) * STAGE_MAX_OP_COUNT);
 
+
+
+/**************************************************************************************/
+/* Lab 2 */
+/**************************************************************************************/
+
+  // Use separate cache to check conflict and 
+  //  capacity misses.
+  init_cache(
+    &dc->fully_assocaitive_cache, 
+    "Fully associative cache", 
+    DCACHE_SIZE, DCACHE_SIZE / DCACHE_LINE_SIZE, 
+    DCACHE_LINE_SIZE, 
+    sizeof(Dcache_Data), 
+    DCACHE_REPL
+  );
+
+/**************************************************************************************/
+
+
+
   /* initialize the cache structure */
   init_cache(&dc->dcache, "DCACHE", DCACHE_SIZE, DCACHE_ASSOC, DCACHE_LINE_SIZE,
              sizeof(Dcache_Data), DCACHE_REPL);
@@ -322,12 +343,12 @@ void update_dcache_stage(Stage_Data* src_sd) {
 /* SMS */
 /**************************************************************************************/
 
-    sms_dcache_access (
-        &sms,
-        op,
-        dc->proc_id,
-        line_addr
-    );
+    // sms_dcache_access (
+    //     &sms,
+    //     op,
+    //     dc->proc_id,
+    //     line_addr
+    // );
 
 /**************************************************************************************/
 
@@ -492,6 +513,44 @@ void update_dcache_stage(Stage_Data* src_sd) {
           }
 
           if(!op->off_path) {
+
+
+
+/**************************************************************************************/
+/* Lab 2 */
+/**************************************************************************************/
+
+            // Check compulsory miss hash table for virtual address.
+            if (
+                !check_compulsory_miss_ht(
+                    &dc->dcache, 
+                    line_addr
+                )
+            ) {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_COMPULSORY);
+            } 
+            //Check if the cache entry is in the fully associative 
+            // cache. If so, then we know a conflict miss occurred. 
+            else if (
+                (Dcache_Data*)cache_access(
+                    &dc->fully_assocaitive_cache, 
+                    line_addr, 
+                    &line_addr, 
+                    FALSE
+                )
+            ) {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_CONFLICT);
+            } 
+            // If not compulsory and not conflict miss, then 
+            //  assume capacity miss.
+            else {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_CAPACITY);
+            }
+
+/**************************************************************************************/
+
+
+
             STAT_EVENT(op->proc_id, DCACHE_MISS);
             STAT_EVENT(op->proc_id, DCACHE_MISS_ONPATH);
             STAT_EVENT(op->proc_id, DCACHE_MISS_LD_ONPATH);
@@ -565,6 +624,44 @@ void update_dcache_stage(Stage_Data* src_sd) {
           }
 
           if(!op->off_path) {
+
+
+
+/**************************************************************************************/
+/* Lab 2 */
+/**************************************************************************************/
+
+            // Check compulsory miss hash table for virtual address.
+            if (
+                !check_compulsory_miss_ht(
+                    &dc->dcache, 
+                    line_addr
+                )
+            ) {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_COMPULSORY);
+            } 
+            //Check if the cache entry is in the fully associative 
+            // cache. If so, then we know a conflict miss occurred. 
+            else if (
+                (Dcache_Data*)cache_access(
+                    &dc->fully_assocaitive_cache, 
+                    line_addr, 
+                    &line_addr, 
+                    FALSE
+                )
+            ) {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_CONFLICT);
+            } 
+            // If not compulsory and not conflict miss, then 
+            //  assume capacity miss.
+            else {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_CAPACITY);
+            }
+
+/**************************************************************************************/
+
+
+
             STAT_EVENT(op->proc_id, DCACHE_MISS);
             STAT_EVENT(op->proc_id, DCACHE_MISS_ONPATH);
             STAT_EVENT(op->proc_id, DCACHE_MISS_LD_ONPATH);
@@ -641,6 +738,44 @@ void update_dcache_stage(Stage_Data* src_sd) {
           }
 
           if(!op->off_path) {
+
+
+
+/**************************************************************************************/
+/* Lab 2 */
+/**************************************************************************************/
+
+            // Check compulsory miss hash table for virtual address.
+            if (
+                !check_compulsory_miss_ht(
+                    &dc->dcache, 
+                    line_addr
+                )
+            ) {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_COMPULSORY);
+            } 
+            //Check if the cache entry is in the fully associative 
+            // cache. If so, then we know a conflict miss occurred. 
+            else if (
+                (Dcache_Data*)cache_access(
+                    &dc->fully_assocaitive_cache, 
+                    line_addr, 
+                    &line_addr, 
+                    FALSE
+                )
+            ) {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_CONFLICT);
+            } 
+            // If not compulsory and not conflict miss, then 
+            //  assume capacity miss.
+            else {
+                STAT_EVENT(op->proc_id, DCACHE_MISS_CAPACITY);
+            }
+
+/**************************************************************************************/
+
+
+
             STAT_EVENT(op->proc_id, DCACHE_MISS);
             STAT_EVENT(op->proc_id, DCACHE_MISS_ONPATH);
             STAT_EVENT(op->proc_id, DCACHE_MISS_ST_ONPATH);
@@ -733,6 +868,39 @@ Flag dcache_fill_line(Mem_Req* req) {
 
 
 /**************************************************************************************/
+/* Lab 2 */
+/**************************************************************************************/
+
+    // Note that this condition assumes that HW prefetching 
+    //  is enabled. Knowing this, our configurations will 
+    //  never reach this point.
+
+    // Check if cache entry is in the fully associative 
+    //  cache. If not, add the entry.
+    Dcache_Data* cache_entry_ =
+            (Dcache_Data*) cache_access (
+                &dc->fully_assocaitive_cache, 
+                line_addr, 
+                &line_addr, 
+                TRUE
+            );
+
+    if (cache_entry_ == NULL) {
+        (Dcache_Data*) cache_insert (
+            &dc->fully_assocaitive_cache, 
+            dc->proc_id, 
+            line_addr, 
+            &line_addr, 
+            &repl_line_addr
+        );
+    }
+
+/**************************************************************************************/
+
+
+
+
+/**************************************************************************************/
 /* SMS */
 /**************************************************************************************/
 
@@ -794,19 +962,46 @@ Flag dcache_fill_line(Mem_Req* req) {
 
     data = (Dcache_Data*)cache_insert(&dc->dcache, dc->proc_id, req->addr,
                                       &line_addr, &repl_line_addr);
-    
+
+
+/*************************************************************************************/
+/* Lab 2 */
+/**************************************************************************************/
+
+    // Check if cache entry is in the fully associative 
+    //  cache. If not, add the entry.
+    Dcache_Data* cache_entry_ =
+            (Dcache_Data*) cache_access (
+                &dc->fully_assocaitive_cache, 
+                line_addr, 
+                &line_addr, 
+                TRUE
+            );
+
+    if (cache_entry_ == NULL) {
+        (Dcache_Data*) cache_insert (
+            &dc->fully_assocaitive_cache, 
+            dc->proc_id, 
+            line_addr, 
+            &line_addr, 
+            &repl_line_addr
+        );
+    }
+
+/**************************************************************************************/
+
 
 
 /**************************************************************************************/
 /* SMS */
 /**************************************************************************************/
 
-    sms_dcache_insert (
-        &sms,
-        (*dc).proc_id,
-        line_addr,
-        repl_line_addr
-    ); 
+    // sms_dcache_insert (
+    //     &sms,
+    //     (*dc).proc_id,
+    //     line_addr,
+    //     repl_line_addr
+    // ); 
 
 /**************************************************************************************/
 

@@ -1,9 +1,10 @@
 /**
  * Authors: Cameron Oakley (Oakley.CameronJ@gmail.com)
- *			Haardhik Mudagere Anil (hmudager@ucsc.edu)
  * Organization: University of California, Santa Cruz (UCSC)
- * Date: 2024-11-16
- * Description: Header file used to ...
+ * Date: 2024-12-06
+ * Description: Implementation file used to implement Spatial Memory 
+ *  Streaming prefetching. The functions implemented maintain the 
+ *  data structures needed for the prefetching method.
  */
 
 #include "debug/debug_macros.h"

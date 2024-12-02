@@ -88,11 +88,75 @@ uns ext_cache_index(Cache* cache, Addr addr, Addr* tag, Addr* line_addr) {
 }
 
 
+
+/**************************************************************************************/
+/* Lab 2 */
+/**************************************************************************************/
+
+    /* Lab 2: Function that iterates over cache entries and determines how many entries are used. */
+    unsigned int find_num_cache_entries(Cache* cache) {
+        unsigned int count = 0;
+        for (int i = 0; i < cache->num_sets; i++) {
+            for (int j = 0; j < cache->assoc; j++) {
+                Cache_Entry* entry = &cache->entries[i][j];
+                if (entry->valid) { count++; }
+            }
+        }
+
+        return count;
+    }
+
+
+    /* Lab 2: Function to check dcache for compulsory miss. */ 
+    int check_compulsory_miss_ht(Cache* cache, Addr key) {
+        int flag = 0;
+
+        if (
+            hash_table_access(
+                cache->compulsory_miss_ht, 
+                key
+            ) != NULL
+        ) { 
+            flag = 1; 
+        } 
+
+        if (!flag) { 
+            Flag* result_of_new_entry = 
+                    (Flag*) malloc (sizeof(Flag));
+            hash_table_access_create(
+                cache->compulsory_miss_ht, 
+                key,
+                result_of_new_entry
+            ); 
+        }
+
+        return flag;
+    }
+
+/**************************************************************************************/
+
+
+
 /**************************************************************************************/
 /* init_cache: */
 
 void init_cache(Cache* cache, const char* name, uns cache_size, uns assoc,
                 uns line_size, uns data_size, Repl_Policy repl_policy) {
+
+
+
+  // Lab 2: Initialize hash table to begin tracking 
+  //  compulsory misses. 
+  cache->compulsory_miss_ht = (Hash_Table*) malloc (sizeof(Hash_Table));
+  init_hash_table (
+    cache->compulsory_miss_ht, 
+    "Hash table of compulsory misses", 
+    100000, 
+    sizeof(Addr)
+  );
+
+
+
   uns num_lines = cache_size / line_size;
   uns num_sets  = cache_size / line_size / assoc;
   uns ii, jj;

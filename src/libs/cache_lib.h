@@ -29,6 +29,14 @@
 #ifndef __CACHE_LIB_H__
 #define __CACHE_LIB_H__
 
+
+
+// Lab 2: Import the Hash_Table struct and 
+//  related functions.
+#include "libs/hash_lib.h"
+
+
+
 #include "globals/global_defs.h"
 #include "libs/list_lib.h"
 
@@ -103,6 +111,14 @@ typedef enum Cache_Insert_Repl_enum {
 } Cache_Insert_Repl;
 
 typedef struct Cache_struct {
+
+
+  // Lab 2: Use hash table to track metadata of 
+  //  compulsory misses within the dcache. 
+  Hash_Table* compulsory_miss_ht;
+
+
+
   char name[MAX_STR_LENGTH + 1]; /* name to identify the cache (for debugging)
                                   */
   uns data_size; /* how big are the data items in each cache entry? (for malloc)
@@ -151,6 +167,23 @@ typedef struct Cache_struct {
   /* For repl with predictor */
   void* predictor;
 } Cache;
+
+
+
+/**************************************************************************************/
+/* Lab 2 */
+/**************************************************************************************/
+
+// Function that iterates over cache entries and 
+//  determines how many entries are used.
+unsigned int find_num_cache_entries(Cache* cache);
+
+//Function to check dcache for compulsory miss. 
+int check_compulsory_miss_ht(Cache* cache, Addr key);
+
+/**************************************************************************************/
+
+
 
 /**************************************************************************************/
 /* Strategy Design */

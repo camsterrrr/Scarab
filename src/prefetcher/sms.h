@@ -1,9 +1,10 @@
 /**
  * Authors: Cameron Oakley (Oakley.CameronJ@gmail.com)
- *			Haardhik Mudagere Anil (hmudager@ucsc.edu)
  * Organization: University of California, Santa Cruz (UCSC)
- * Date: 2024-11-16
- * Description: Header file used to ...
+ * Date: 2024-12-06
+ * Description: Header file used to implement Spatial Memory Streaming
+ *  prefetching. This defines the data structures and functions used 
+ *  implement the prefetching method.
  */
 
 #ifndef __SMS_H__
@@ -160,8 +161,6 @@ Flag active_generation_table_check (
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
- * @param op Pointer to object containing metadata about the
- *  current instruction being executed.
  * @param proc_id ID of processor executing the instruction.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
@@ -174,10 +173,8 @@ void active_generation_table_delete (
 
 /**
  * This function calculates the index value used to search
- *  the Filter and Accumulaton Table. For now, it just 
- *  calculates the pc + line address offset bits, as this
- *  was the method the SMS results described as being the
- *  optimal.
+ *  the Filter and Accumulation Table. For now, it just 
+ *  calculates the base spatial region address.
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
@@ -213,11 +210,12 @@ AccessPattern line_address_access_pattern (
 
 /**
  * This function is called whenever the Dcache stage 
- *  performs a dcache access. It is used to update 
+ *  performs a Dcache access. It is used to update 
  *  the Accumulation Table or Filter Table entries. If
  *  a cache entry doesn't exist in either table, we 
  *  call the Pattern History Table logic and stream 
- *  cache blocks to the Dcache.
+ *  cache blocks to the Dcache, then allocate a new
+ *  entry in the Filter Table.
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
@@ -236,7 +234,7 @@ void sms_dcache_access (
 
 /**
  * This function is called whenever the Dcache stage
- *  performs a cache insert. We check to see if the 
+ *  performs a Dcache insert. We check to see if the 
  *  line being inserted is in the Accumulation Table. 
  *  If it is, we transfer it to the Pattern History 
  *  Table. If it isn't, we invalidate it in the Filter
@@ -266,10 +264,9 @@ void sms_dcache_insert (
  * 
  * @param table Is the table to check if the entry exists 
  *  in.
+ * @param proc_id ID of processor executing the instruction.
  * @param table_index Is the "key" we're searching the 
  *  table for.
- * @param ret_data Is a pointer to the table entry's data.
- *  This pointer will be NULL if the table doesn't exist.
  */
 AccessPattern* table_check (
     SmsCache* table, 
@@ -278,11 +275,21 @@ AccessPattern* table_check (
 );
 
 /**
+ * This helper function is used to insert a new entry
+ *  into the table passed in as a parameter.
  * 
+ * @param table Is the table to check if the entry exists 
+ *  in.
+ * @param proc_id ID of processor executing the instruction.
+ * @param table_index Is the "key" we're searching the 
+ *  table for.
+ * @param memory_region_access_pattern Updated access 
+ *  pattern of the region.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
  */
 int table_insert (
     SmsCache* table,
-    // Dcache_Stage* dcache_stage,
     uns8 proc_id,
     TableIndex table_index, 
     AccessPattern memory_region_access_pattern,
@@ -290,7 +297,14 @@ int table_insert (
 );
 
 /**
+ * This helper function is used to invalidate the cache 
+ *  entry from the table passed in as a parameter.
  * 
+ * @param table Is the table to check if the entry exists 
+ *  in.
+ * @param proc_id ID of processor executing the instruction.
+ * @param table_index Is the "key" we're searching the 
+ *  table for.
  */
 void table_invalidate (
     SmsCache* table,
@@ -334,9 +348,12 @@ void filter_table_access (
  *  will be used to call the "filter_table_insert" 
  *  function to allocate an entry in the Filter Table.
  * 
- * @param filter_table Pointer to the filter table.
- * @param table_index Computed table index (PC+offset).
- * @param ret_data Pointer to table entry data.
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param proc_id ID of processor executing the instruction.
+ * @param table_index Computed table index.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
  */
 Flag filter_table_check (
     SMS* sms, 
@@ -346,16 +363,20 @@ Flag filter_table_check (
 );
 
 /**
- * The purpose of this function is to inset a new entry 
+ * The purpose of this function is to insert a new entry 
  *  to the filter table. This function will only be 
  *  called if "filter_table_check" returns false. 
  *  If this function is called, we can assume an entry
  *  doesn't exist in the Filter Table.
  * 
- * @param filter_table Pointer to the filter table.
- * @param table_index Computed table index (PC+offset).
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param proc_id ID of processor executing the instruction.
+ * @param table_index Computed table index.
  * @param line_addr_access_pattern  Current access 
  *  pattern of the region.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
  */
 void filter_table_insert (
     SMS* sms,
@@ -366,7 +387,19 @@ void filter_table_insert (
 );
 
 /**
+ * The purpose of this function is to check if an entry in 
+ *  the Filter Table needs to have it's access pattern
+ *  updated. If it does, then it's transferred to the 
+ *  Accumulation Table, as it is the second unique access.
  * 
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param proc_id ID of processor executing the instruction.
+ * @param table_index Computed table index.
+ * @param line_addr_access_pattern  Current access 
+ *  pattern of the region.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
  */
 void filter_table_update (
     SMS* sms, 
@@ -407,17 +440,17 @@ void accumulation_table_access (
 );
 
 /**
- * The purpose of this function is to check if a pc+offset
+ * The purpose of this function is to check if a index
  *  address exists in the accumulation table. If entry 
  *  exists, ret_data will store a pointer to the cache 
  *  entry's data. If an entry doesn't exist, the returned 
  *  flag will be used to call the "filter_table_insert" 
  *  function to allocate an entry in the Filter Table.
  * 
- * @param accumulation_table Pointer to the accumulation
- *  table.
- * @param table_index Computed table index (PC+offset).
- * @param ret_data Pointer to table entry data.
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param proc_id ID of processor executing the instruction.
+ * @param table_index Computed table index.
  */
 Flag accumulation_table_check (
     SMS* sms, 
@@ -432,12 +465,16 @@ Flag accumulation_table_check (
  *  If this function is called, we can assume an entry
  *  doesn't exist in the Accumulation Table.
  * 
- * @param accumulation_table Pointer to the Accumulation
- *  Table.
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
  * @param proc_id ID of processor executing the instruction.
- * @param table_index Computed table index (PC+offset).
+ * @param table_index Computed table index.
  * @param line_addr_access_pattern  Current access 
  *  pattern of the region.
+ * @param memory_region_access_pattern Updated access 
+ *  pattern of the region.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
  */
 void accumulation_table_insert (
     SMS* sms,
@@ -453,16 +490,18 @@ void accumulation_table_insert (
  *  Accumulation Table entry needs its access pattern 
  *  updated.
  * 
- * @param accumulation_table Pointer to the accumulation 
- *  table.
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param cache_entry_line_data Pointer to object containing
+ *  the access pattern data for a Accumulation Table entry.
  * @param proc_id ID of processor executing the instruction.
- * @param table_index Computed table index (PC+offset).
+ * @param table_index Computed table index.
  * @param line_addr_access_pattern  Current access 
  *  pattern of the region.
  * @param memory_region_access_pattern Updated access 
  *  pattern of the region.
- * @param ret_data Pointer to the Accumulation Table
- *  entry's data.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
  */
 void accumulation_table_update (
     SMS* sms, 
@@ -501,7 +540,14 @@ void pattern_history_table_access (
 );
 
 /**
+ * The purpose of this function is to check if an index has
+ *  an entry in the Pattern History Table. It returns true
+ *  if it has an entry and false if not.
  * 
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
+ * @param proc_id ID of processor executing the instruction.
+ * @param table_index Computed table index.
  */
 Flag pattern_history_table_check (
     SMS* sms, 
@@ -516,13 +562,12 @@ Flag pattern_history_table_check (
  *  so if the set is full, an entry will be evicted.
  * 
  * @param pattern_history_table Pointer to cache object.
- * @param dcache_stage Pointer to object maintaining 
- *  references for useful data cache stage and data cache 
- *  metadata.
  * @param proc_id ID of processor executing the instruction.
- * @param table_index Computed table index (PC+offset).
+ * @param table_index Computed table index.
  * @param memory_region_access_pattern Access pattern of 
  *  the region.
+ * @param line_addr Physical memory address. This physical 
+ *  address is referencing data.
  */
 void pattern_history_table_insert (
     SMS* sms,
@@ -546,7 +591,7 @@ void pattern_history_table_insert (
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
  * @param proc_id ID of processor executing the instruction.
- * @param table_index Computed table index (PC+offset).
+ * @param table_index Computed table index.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  * @param memory_region_access_pattern Stores the combined
