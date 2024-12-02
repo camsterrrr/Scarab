@@ -1352,6 +1352,8 @@ void pattern_history_table_access (
         );
     }
 
+    free (set_entries_access_patterns);
+
     return;
 }
 
@@ -1488,6 +1490,8 @@ void sms_stream_blocks_to_data_cache (
                 );
             }
     }
+
+    free (prediction_registers);
 
     return;
 }

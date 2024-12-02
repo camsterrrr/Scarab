@@ -121,12 +121,11 @@ uns ext_cache_index(Cache* cache, Addr addr, Addr* tag, Addr* line_addr) {
         } 
 
         if (!flag) { 
-            Flag* result_of_new_entry = 
-                    (Flag*) malloc (sizeof(Flag));
+            Flag result_of_new_entry = FALSE;
             hash_table_access_create(
                 cache->compulsory_miss_ht, 
                 key,
-                result_of_new_entry
+                &result_of_new_entry
             ); 
         }
 

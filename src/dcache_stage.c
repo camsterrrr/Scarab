@@ -343,12 +343,12 @@ void update_dcache_stage(Stage_Data* src_sd) {
 /* SMS */
 /**************************************************************************************/
 
-    // sms_dcache_access (
-    //     &sms,
-    //     op,
-    //     dc->proc_id,
-    //     line_addr
-    // );
+    sms_dcache_access (
+        &sms,
+        op,
+        dc->proc_id,
+        line_addr
+    );
 
 /**************************************************************************************/
 
@@ -488,6 +488,8 @@ void update_dcache_stage(Stage_Data* src_sd) {
 /* SMS */
 /**************************************************************************************/
 
+            // I don't believe we want to call this logic here...
+
             // sms_dcache_access (
             //     &sms,
             //     op,
@@ -598,7 +600,8 @@ void update_dcache_stage(Stage_Data* src_sd) {
 /**************************************************************************************/
 /* SMS */
 /**************************************************************************************/
-
+            // I don't believe we want to call this logic here...
+            
             // sms_dcache_access (
             //     &sms,
             //     op,
@@ -713,7 +716,8 @@ void update_dcache_stage(Stage_Data* src_sd) {
 /**************************************************************************************/
 /* SMS */
 /**************************************************************************************/
-
+            // I don't believe we want to call this logic here...
+            
             // sms_dcache_access (
             //     &sms,
             //     op,
@@ -996,12 +1000,12 @@ Flag dcache_fill_line(Mem_Req* req) {
 /* SMS */
 /**************************************************************************************/
 
-    // sms_dcache_insert (
-    //     &sms,
-    //     (*dc).proc_id,
-    //     line_addr,
-    //     repl_line_addr
-    // ); 
+    sms_dcache_insert (
+        &sms,
+        (*dc).proc_id,
+        line_addr,
+        repl_line_addr
+    ); 
 
 /**************************************************************************************/
 
