@@ -294,6 +294,7 @@ int table_insert (
  */
 void table_invalidate (
     SmsCache* table,
+    uns8 proc_id,
     TableIndex table_index
 );
 

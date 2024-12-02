@@ -247,6 +247,7 @@ void active_generation_table_delete (
         
         table_invalidate (
             &((*sms).accumulation_table),
+            proc_id,
             table_index
         );
     }
@@ -268,7 +269,8 @@ void active_generation_table_delete (
         );
     
         table_invalidate (
-            &((*sms).filter_table), 
+            &((*sms).filter_table),
+            proc_id,
             table_index
         );
     }  
@@ -535,7 +537,7 @@ void sms_dcache_insert (
     
     // AccessPattern* cache_entry_1 = 
     //     (AccessPattern*) cache_insert(
-    //         &(*(*sms)).accumulation_table,
+    //         &(*(*sms)).pattern_history_table,
     //         proc_id, 
     //         table_index_, 
     //         &line_addr_,
@@ -545,7 +547,7 @@ void sms_dcache_insert (
     
     // AccessPattern* cache_entry_2 = 
     //         (AccessPattern*) cache_access(
-    //             &((*(*sms)).accumulation_table),
+    //             &((*(*sms)).pattern_history_table),
     //             table_index_,
     //             &table_index_,
     //             TRUE
@@ -713,6 +715,7 @@ int table_insert (
 
 void table_invalidate (
     SmsCache* table,
+    uns8 proc_id,
     TableIndex table_index
 ) {
     STAT_EVENT(
@@ -1020,6 +1023,7 @@ void accumulation_table_access (
 
                 table_invalidate (
                     &((*sms)->accumulation_table),
+                    proc_id,
                     table_index
                 );
                 
@@ -1203,9 +1207,6 @@ void pattern_history_table_access (
         PATTERN_HISTORY_TABLE_ACCESS
     );
 
-    /* Table references */
-    Cache* dcache = &(*(*sms).dcache_stage).dcache;
-
     /* Index variable - used to index tables */
     TableIndex table_index = 
             get_table_index (
@@ -1252,7 +1253,7 @@ void pattern_history_table_access (
             //  to index... Let's just say that didn't work
             //  as intended...
 
-        if (cache_entry) {
+        if (cache_entry != NULL) {
             // Found valid cache entry.
             if (
                 (*cache_entry).valid
@@ -1267,7 +1268,7 @@ void pattern_history_table_access (
                 );
 
                 (*cache_entry).last_access_time = sim_time;
-                set_entries_access_patterns[i] = (*cache_entry).data;
+                set_entries_access_patterns[used_elements] = (AccessPattern*)(*cache_entry).data;
                 used_elements++;
             } 
 
@@ -1298,8 +1299,6 @@ void pattern_history_table_access (
         
         // Else indicate the entry is null
         else {
-            set_entries_access_patterns[i] = NULL;
-            
             STAT_EVENT(
                 proc_id, 
                 PATTERN_HISTORY_TABLE_NULL_CACHE_ENTRY
@@ -1307,11 +1306,11 @@ void pattern_history_table_access (
         }
     }
 
-    if (used_elements > 0) { 
+    if (used_elements) { 
 
         // 2. Merge all access patterns to a single variable.
         AccessPattern set_merged_access_pattern = 0;
-        for (int i = 0; i < (*dcache).assoc; i++) { 
+        for (int i = 0; i < used_elements; i++) { 
             if (set_entries_access_patterns[i] != NULL) {
                 set_merged_access_pattern |= *(set_entries_access_patterns[i]);
             }
@@ -1365,10 +1364,6 @@ void sms_stream_blocks_to_data_cache (
     AccessPattern set_merged_access_pattern,
     Addr line_addr
 ) { 
-    //!!
-    return;
-    //!!
-
     STAT_EVENT(
         proc_id, 
         SMS_STREAM_BLOCKS_TO_DATA_CACHE
@@ -1382,6 +1377,8 @@ void sms_stream_blocks_to_data_cache (
     //  by the access pattern.
     uns num_regions = 0;
     for (uns i = 0; i < 64; i++) {
+        // 64 represents the 64 bits used in the 
+        //  AccessPattern.
         if ((set_merged_access_pattern >> i) & 1) {
             num_regions++;
         }
@@ -1402,11 +1399,13 @@ void sms_stream_blocks_to_data_cache (
 
     int arr_idx = 0;
     for (uns i = 0; i < 64; i++) {
+        // 64 represents the 64 bits used in the 
+        //  AccessPattern.
+
         // 3a. Check if ith bit in the access pattern
         //  is set to 1. If so, calculate the address 
         //  the prediction register should point to. 
         //  Else, increment and move on. 
-
         if ((set_merged_access_pattern >> i) & 1) {
             prediction_registers[arr_idx] = (
                 base_address_of_region + region_offset
@@ -1436,26 +1435,57 @@ void sms_stream_blocks_to_data_cache (
 
     // 4."Stream" each of the blocks to the Dcache.
     for (uns i = 0; i < num_regions; i++) {
-        STAT_EVENT(
-            proc_id, 
-            BLOCKS_STREAMED_TO_DCACHE
-        );
-
         SmsAddr line_addr = prediction_registers[i];
+            //? Make this a pointer in the heap
         SmsAddr repl_line_addr = 0;
 
-        //! Todo Check if they're in cache first.
+            // 4a. Check if there is an entry in the 
+            //  Dcache.
+            AccessPattern* cache_line_data = 
+                    table_check (
+                        &((*(*sms).dcache_stage).dcache), 
+                        proc_id,
+                        table_index
+                    );
 
-        Dcache_Data* dcache_line_data = 
-                (Dcache_Data*) cache_insert(
-                                    &(*(*sms).dcache_stage).dcache, 
-                                    (*(*sms).dcache_stage).proc_id, 
-                                    line_addr,
-                                    &line_addr, 
-                                    &repl_line_addr
-                                );
+            if (cache_line_data) {
+                STAT_EVENT(
+                    proc_id, 
+                    SMS_STREAM_BLOCKS_TO_DATA_CACHE_BLOCKS_STREAMED_TO_DCACHE
+                );
 
-        (*dcache_line_data).HW_prefetch = TRUE;
+                // 4b. Stream data to the Dcache.
+                Dcache_Data* dcache_line_data = 
+                        (Dcache_Data*) cache_insert(
+                                            &(*(*sms).dcache_stage).dcache, 
+                                            proc_id,
+                                            line_addr,
+                                            &line_addr, 
+                                            &repl_line_addr
+                                        );
+                (*dcache_line_data).HW_prefetch = TRUE;
+
+                // 4c. Check if a cache entry was 
+                //  evicted. If so, check if it is
+                //  an entry in the Active Generation
+                //  table. If it is, invalidate it
+                //  and transfer the access pattern
+                //  to the Pattern History Table.
+                sms_dcache_insert(
+                    &sms,
+                    proc_id,
+                    line_addr,
+                    repl_line_addr
+                );
+            }
+
+            // Else do nothing.
+            else {
+                STAT_EVENT(
+                    proc_id, 
+                    SMS_STREAM_BLOCKS_TO_DATA_CACHE_NO_BLOCKS_STREAMED_TO_DCACHE
+                );
+            }
     }
 
     return;
