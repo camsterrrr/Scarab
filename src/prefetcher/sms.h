@@ -32,32 +32,6 @@ typedef uns64 AccessPattern;
 typedef uns64 Mask;
 
 /**
- * This struct is responsible for defining a prediction register
- * 	used to store a bitmap representing a region of memory's 
- * 	access pattern. This access pattern will be used to 
- *	stream blocks to the L1 cache.
- */
-struct SmsPredictionRegister {
-
-	/* Base Address */
-	SmsRegionAddr base_region_address;
-		// Maintains reference to start of region's 
-		// 	address. Used to offset into region to
-		//	stream blocks of memory to L1 cache.
-
-	/* Access Pattern */
-	AccessPattern region_access_pattern;
-		// Stores access pattern history as a bitmap. 1
-		//	represents that a given block of memory was 
-		// 	within a given interval.
-		// Note that the Pattern Histroy Table is a set-
-		//	associative cache, so entries may get 
-		//	evicted if there is a conflict.
-
-} typedef PredictionRegister;
-
-
-/**
  * This struct is responsible for defining the necessary references
  * 	to data and structures maintained by SMS. Consists of 
  * 	1) Pattern History Table, 2) Active Generation Table, and 
@@ -65,11 +39,6 @@ struct SmsPredictionRegister {
  * 	their respective metadata.
  */
 struct Spatial_Memory_Streaming_struct {
-
-    Op* op_sms_dcache_insert;
-        // This value is a quick hack so that the 
-        //  sms_dcache_insert can access the program 
-        //  counter information
 
     /* References to Data Cache */
     Dcache_Stage* dcache_stage;
@@ -84,7 +53,7 @@ struct Spatial_Memory_Streaming_struct {
         //  the instruction cache is needed.
 
 	/* Pattern History Table */
-	SmsCache* pattern_history_table; 
+	SmsCache pattern_history_table; 
 		// Set-associative cache used to maintain references
 		//	to each region of memory's access patterns. 
 		//	Given the structure is n-associative, it will
@@ -99,7 +68,7 @@ struct Spatial_Memory_Streaming_struct {
 		//	the L1 cache.
 
 	/* Accumulation Table */
-	SmsHashTable* accumulation_table; 
+	SmsCache accumulation_table; 
 		// Key: base region address in memory (SmsRegionAddr)
 		// Value: region access pattern (AccessPattern)
 		// Hash Map-like structure. Utilized because this 
@@ -112,7 +81,7 @@ struct Spatial_Memory_Streaming_struct {
 		//	If so, update access pattern as needed.
 
 	/* Filter Table */
-	SmsHashTable* filter_table; 
+	SmsCache filter_table; 
 		// Key: base region address in memory (SmsRegionAddr)
 		// Value: region access pattern (AccessPattern)
 		// Hash Map-like structure. Utilized because this 
@@ -127,15 +96,6 @@ struct Spatial_Memory_Streaming_struct {
 		//	leave in filter table. If uniqie access, move 
 		//	accumulation table (2nd time region is 
 		//	accessed).
-
-	/* Prediction Registers */
-	PredictionRegister *arr_of_prediction_registers;
-		// Maintains references to each prediction register; 
-		// 	one for each entry in pattern history table 
-		//	set.
-		// Prediction registers store the access patterns 
-		//	maintained by the given region of memory's 
-		//	corresponding pattern history table set.
 
 	/* Prefetch Queue */
 	SmsList prefetch_queue;
@@ -156,18 +116,6 @@ struct Spatial_Memory_Streaming_struct {
 
 SMS* sms_init (
     Dcache_Stage* dcache_stage
-);
-
-void accumulation_table_init (
-    SmsHashTable* accumulation_table
-);
-
-void filter_table_init (
-    SmsHashTable* filter_table
-);
-
-void pattern_history_table_init (
-    SmsCache* pattern_history_table
 );
 
 
@@ -194,15 +142,12 @@ uns cache_index(
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
- * @param op Pointer to object containing metadata about the
- *  current instruction being executed.
  * @param proc_id ID of processor executing the instruction.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
-Flag check_entry_active_generation_table (
+Flag active_generation_table_check (
     SMS* sms,
-    Op* op,
     uns8 proc_id,
     Addr line_addr
 );
@@ -221,9 +166,8 @@ Flag check_entry_active_generation_table (
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
-Flag delete_entry_active_generation_table (
+void active_generation_table_delete (
     SMS* sms,
-    Op* op,
     uns8 proc_id,
     Addr line_addr
 );
@@ -237,15 +181,12 @@ Flag delete_entry_active_generation_table (
  * 
  * @param sms Pointer to object maintaining reference to SMS
  *  tables and metadata.
- * @param op Pointer to object containing metadata about the
- *  current instruction being executed.
  * @param proc_id ID of processor executing the instruction.
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
 TableIndex get_table_index (
     SMS* sms,
-    Op* op,
     uns8 proc_id,
     Addr line_addr
 );
@@ -287,7 +228,7 @@ AccessPattern line_address_access_pattern (
  *  address is referencing data.
  */
 void sms_dcache_access (
-    SMS* sms,
+    SMS** sms,
     Op* op,
     uns8 proc_id,
     Addr line_addr
@@ -312,7 +253,7 @@ void sms_dcache_access (
  *  Dcache.
  */
 void sms_dcache_insert (
-    SMS* sms,
+    SMS** sms,
     uns8 proc_id,
     Addr line_addr,
     Addr repl_line_addr
@@ -330,11 +271,30 @@ void sms_dcache_insert (
  * @param ret_data Is a pointer to the table entry's data.
  *  This pointer will be NULL if the table doesn't exist.
  */
-Flag table_check (
-    SmsHashTable* table, 
+AccessPattern* table_check (
+    SmsCache* table, 
+    uns8 proc_id,
+    TableIndex table_index
+);
+
+/**
+ * 
+ */
+int table_insert (
+    SmsCache* table,
+    // Dcache_Stage* dcache_stage,
     uns8 proc_id,
     TableIndex table_index, 
-    AccessPattern* ret_data
+    AccessPattern memory_region_access_pattern,
+    Addr line_addr
+);
+
+/**
+ * 
+ */
+void table_invalidate (
+    SmsCache* table,
+    TableIndex table_index
 );
 
 /* Filter Table */
@@ -378,10 +338,10 @@ void filter_table_access (
  * @param ret_data Pointer to table entry data.
  */
 Flag filter_table_check (
-    SmsHashTable* filter_table, 
+    SMS* sms, 
     uns8 proc_id,
-    TableIndex table_index, 
-    AccessPattern* ret_data
+    TableIndex table_index,
+    Addr line_addr
 );
 
 /**
@@ -397,39 +357,22 @@ Flag filter_table_check (
  *  pattern of the region.
  */
 void filter_table_insert (
-    SmsHashTable* filter_table, 
+    SMS* sms,
     uns8 proc_id,
     TableIndex table_index, 
-    AccessPattern line_addr_access_pattern
+    AccessPattern line_addr_access_pattern,
+    Addr line_addr
 );
 
-/** 
- * The purpose of this function is to check if the filter
- *  table entry needs its access pattern updated. If it 
- *  does need updating, then we move it to the accumulation 
- *  table (entry accessed twice). If it does not need 
- *  updating (accessing same region), we do nothing.
- *  SMS requires that entries in the Filter Table must be
- *  accessed twice before promoting to the Accumulation 
- *  Table.
+/**
  * 
- * @param filter_table Pointer to the filter table.
- * @param accumulation_table Pointer to the accumulation 
- *  table.
- * @param proc_id ID of processor executing the instruction.
- * @param table_index Computed table index (PC+offset).
- * @param line_addr_access_pattern  Current access 
- *  pattern of the region.
- * @param memory_region_access_pattern Updated access 
- *  pattern of the region.
  */
 void filter_table_update (
-    SmsHashTable* filter_table, 
-    SmsHashTable* accumulation_table, 
+    SMS* sms, 
     uns8 proc_id,
-    TableIndex table_index,
+    TableIndex table_index, 
     AccessPattern line_addr_access_pattern,
-    AccessPattern memory_region_access_pattern
+    Addr line_addr
 );
 
 
@@ -456,7 +399,7 @@ void filter_table_update (
  *  address is referencing data.
  */
 void accumulation_table_access (
-    SMS* sms,
+    SMS** sms,
     Op* op,
     uns8 proc_id, 
     Addr line_addr
@@ -476,10 +419,9 @@ void accumulation_table_access (
  * @param ret_data Pointer to table entry data.
  */
 Flag accumulation_table_check (
-    SmsHashTable* accumulation_table, 
+    SMS* sms, 
     uns8 proc_id,
-    TableIndex table_index, 
-    AccessPattern* ret_data
+    TableIndex table_index
 );
 
 /**
@@ -497,11 +439,12 @@ Flag accumulation_table_check (
  *  pattern of the region.
  */
 void accumulation_table_insert (
-    SmsHashTable* accumulation_table,
+    SMS* sms,
     uns8 proc_id,
     TableIndex table_index,
     AccessPattern line_addr_access_pattern,
-    AccessPattern memory_region_access_pattern
+    AccessPattern memory_region_access_pattern,
+    Addr line_addr
 );
 
 /**
@@ -521,61 +464,17 @@ void accumulation_table_insert (
  *  entry's data.
  */
 void accumulation_table_update (
-    SmsHashTable* accumulation_table, 
+    SMS* sms, 
+    Cache_Entry* cache_entry_line_data,
     uns8 proc_id,
     TableIndex table_index,
     AccessPattern line_addr_access_pattern,
-    AccessPattern memory_region_access_pattern,
-    AccessPattern* ret_data
-);
-
-/**
- * The purpose of this function is to transfer an 
- *  entry from the Accumulation Table to the Pattern 
- *  History Table after some interval has passed. The
- *  SMS design states that entries should not be
- *  transferred until an interval has passed. This 
- *  interval identifies the predicted time in which 
- *  the cache entries must be stored in the data 
- *  cache. This is interval is used to ensure cache 
- *  entries aren't evicted before they're needed.
- * 
- * @param sms Pointer to object maintaining reference to SMS
- *  tables and metadata.
- * @param proc_id ID of processor executing the instruction.
- * @param table_index Computed table index (PC+offset).
- */
-Flag accumulation_table_transfer (
-    SMS* sms, 
-    uns8 proc_id,
-    TableIndex table_index
+    AccessPattern stored_memory_region_access_pattern,
+    Addr line_addr
 );
 
 
 /* Pattern History Table */
-
-/**
- * The purpose of this function is to insert a entry 
- *  from the Accumulation Table to the Pattern History
- *  Table. The Pattern History Table is set-associative,
- *  so if the set is full, an entry will be evicted.
- * 
- * @param pattern_history_table Pointer to cache object.
- * @param dcache_stage Pointer to object maintaining 
- *  references for useful data cache stage and data cache 
- *  metadata.
- * @param proc_id ID of processor executing the instruction.
- * @param table_index Computed table index (PC+offset).
- * @param memory_region_access_pattern Access pattern of 
- *  the region.
- */
-void pattern_history_table_insert (
-    SmsCache* pattern_history_table,
-    Dcache_Stage* dcache_stage,
-    uns8 proc_id,
-    TableIndex table_index, // Assume this is calculated by caller.
-    AccessPattern memory_region_access_pattern
-);
 
 /**
  * The purpose of this function is to handle a Pattern 
@@ -593,10 +492,42 @@ void pattern_history_table_insert (
  * @param line_addr Physical memory address. This physical 
  *  address is referencing data.
  */
-void pattern_history_table_lookup (
+void pattern_history_table_access (
     SMS* sms, 
     Op* op,
     uns8 proc_id,
+    Addr line_addr
+);
+
+/**
+ * 
+ */
+Flag pattern_history_table_check (
+    SMS* sms, 
+    uns8 proc_id,
+    TableIndex table_index
+);
+
+/**
+ * The purpose of this function is to insert a entry 
+ *  from the Accumulation Table to the Pattern History
+ *  Table. The Pattern History Table is set-associative,
+ *  so if the set is full, an entry will be evicted.
+ * 
+ * @param pattern_history_table Pointer to cache object.
+ * @param dcache_stage Pointer to object maintaining 
+ *  references for useful data cache stage and data cache 
+ *  metadata.
+ * @param proc_id ID of processor executing the instruction.
+ * @param table_index Computed table index (PC+offset).
+ * @param memory_region_access_pattern Access pattern of 
+ *  the region.
+ */
+void pattern_history_table_insert (
+    SMS* sms,
+    uns8 proc_id,
+    TableIndex table_index, 
+    AccessPattern memory_region_access_pattern,
     Addr line_addr
 );
 

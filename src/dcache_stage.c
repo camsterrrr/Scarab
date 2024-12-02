@@ -267,7 +267,6 @@ void update_dcache_stage(Stage_Data* src_sd) {
     Op*  op;
     uns  bank;
     Flag wrongpath_dcmiss = FALSE;
-
     oldest_index  = 0;
     oldest_op_num = MAX_CTR;
     for(jj = 0; jj < dc->sd.max_op_count; jj++)
@@ -316,6 +315,24 @@ void update_dcache_stage(Stage_Data* src_sd) {
 
     line = (Dcache_Data*)cache_access(&dc->dcache, op->oracle_info.va,
                                       &line_addr, TRUE);
+
+
+
+/**************************************************************************************/
+/* SMS */
+/**************************************************************************************/
+
+    sms_dcache_access (
+        &sms,
+        op,
+        dc->proc_id,
+        line_addr
+    );
+
+/**************************************************************************************/
+
+
+
     op->dcache_cycle = cycle_count;
     dc->idle_cycle   = MAX2(dc->idle_cycle, cycle_count + DCACHE_CYCLES);
 
@@ -407,18 +424,6 @@ void update_dcache_stage(Stage_Data* src_sd) {
 
       if(op->table_info->mem_type == MEM_LD) {  // load request
 
-
-
-/**************************************************************************************/
-/* SMS */
-/**************************************************************************************/
-
-        (*(*sms).op_sms_dcache_insert) = *op;
-        
-/**************************************************************************************/
-
-
-
         if(((model->mem == MODEL_MEM) &&
             scan_stores(
               op->oracle_info.va,
@@ -462,12 +467,12 @@ void update_dcache_stage(Stage_Data* src_sd) {
 /* SMS */
 /**************************************************************************************/
 
-            sms_dcache_access (
-                sms,
-                op,
-                dc->proc_id,
-                line_addr
-            );
+            // sms_dcache_access (
+            //     &sms,
+            //     op,
+            //     dc->proc_id,
+            //     line_addr
+            // );
 
 /**************************************************************************************/
 
@@ -511,18 +516,6 @@ void update_dcache_stage(Stage_Data* src_sd) {
                 op->table_info->mem_type == MEM_WH) {
         // prefetches don't scan the store buffer
 
-
-
-/**************************************************************************************/
-/* SMS */
-/**************************************************************************************/
-
-        (*(*sms).op_sms_dcache_insert) = *op;
-        
-/**************************************************************************************/
-
-
-
         if(((model->mem == MODEL_MEM) &&
             new_mem_req(MRT_DPRF, dc->proc_id, line_addr, DCACHE_LINE_SIZE,
                         DCACHE_CYCLES - 1 + op->inst_info->extra_ld_latency, op,
@@ -547,12 +540,12 @@ void update_dcache_stage(Stage_Data* src_sd) {
 /* SMS */
 /**************************************************************************************/
 
-            sms_dcache_access (
-                sms,
-                op,
-                dc->proc_id,
-                line_addr
-            );
+            // sms_dcache_access (
+            //     &sms,
+            //     op,
+            //     dc->proc_id,
+            //     line_addr
+            // );
 
 /**************************************************************************************/
 
@@ -624,12 +617,12 @@ void update_dcache_stage(Stage_Data* src_sd) {
 /* SMS */
 /**************************************************************************************/
 
-            sms_dcache_access (
-                sms,
-                op,
-                dc->proc_id,
-                line_addr
-            );
+            // sms_dcache_access (
+            //     &sms,
+            //     op,
+            //     dc->proc_id,
+            //     line_addr
+            // );
 
 /**************************************************************************************/
 
@@ -809,7 +802,7 @@ Flag dcache_fill_line(Mem_Req* req) {
 /**************************************************************************************/
 
     sms_dcache_insert (
-        sms,
+        &sms,
         (*dc).proc_id,
         line_addr,
         repl_line_addr
