@@ -594,7 +594,7 @@ void sms_dcache_insert (
                 active_generation_table_check (
                     *sms,
                     proc_id,
-                    line_addr
+                    repl_line_addr
                 );
 
         if (flag) {
@@ -606,7 +606,7 @@ void sms_dcache_insert (
             active_generation_table_delete (
                 *sms,
                 proc_id,
-                line_addr
+                repl_line_addr
             );
         } 
 
@@ -646,6 +646,7 @@ AccessPattern* table_check (
 }
 
 int table_insert (
+    SMS* sms,
     SmsCache* table,
     uns8 proc_id,
     TableIndex table_index, 
@@ -660,19 +661,19 @@ int table_insert (
 
     // 1. Call cache_insert to have a new entry allocated.
     Addr temp_line_addr = line_addr;
-    AccessPattern evicted_entry_access_pattern = 0; 
+    Addr evicted_cache_line = 0; 
             // Stores the data of the cache entry that 
             // was replaced.
 
     AccessPattern* cache_line_data = 
-            (AccessPattern*) cache_insert(
+            (AccessPattern*) cache_insert (
                 table,
                 proc_id,
                     // Identifies the processor ID for a 
                     //  multi-core CPU.
                 table_index, 
                 &temp_line_addr,
-                &evicted_entry_access_pattern
+                &evicted_cache_line
             );
 
     // 2. Set the data stored in the newly allocated
@@ -683,8 +684,8 @@ int table_insert (
     //  This will be used for a graph in our final lab report.
     //  Remember the SMS tables are set-associative, so only 
     //  entries with the same set will be grouped together.
-    if (evicted_entry_access_pattern != 0) {
-        if (memory_region_access_pattern == evicted_entry_access_pattern) { 
+    if (evicted_cache_line != 0) {
+        if (line_addr == evicted_cache_line) { 
             ret_val = 1;
 
             STAT_EVENT(
@@ -849,6 +850,7 @@ void filter_table_insert (
 
     // 1. Create new key-value mapping in the Filter Table.
     uns flag = table_insert (
+            sms,
             &((*sms).filter_table), 
             proc_id,
             table_index,
@@ -856,12 +858,12 @@ void filter_table_insert (
             line_addr
         );
 
-    if (flag == 0) {
+    if (flag == 1) {
         STAT_EVENT(
             proc_id, 
             FILTER_TABLE_SAME_ENTRY_EVICTED
         );
-    } else if (flag == 1) {
+    } else if (flag == 0) {
         STAT_EVENT(
             proc_id, 
             FILTER_TABLE_DIFFERENT_ENTRY_EVICTED
@@ -1010,31 +1012,28 @@ void accumulation_table_access (
         // 3. If there is a valid entry in the Accumulation
         //  Table, then check if it needs updating.
         if (cache_line_data) {
-            AccessPattern stored_memory_region_access_pattern = *cache_line_data;
-            line_addr_access_pattern |= stored_memory_region_access_pattern;
+            AccessPattern stored_memory_region_access_pattern = 0;
+            stored_memory_region_access_pattern = *cache_line_data;
 
             // 3a. If it needs updating, update the entry.
             if (
                 line_addr_access_pattern != stored_memory_region_access_pattern
+                && (line_addr_access_pattern | stored_memory_region_access_pattern) != stored_memory_region_access_pattern
             ) {
                 STAT_EVENT(
                     proc_id, 
                     ACCUMULATION_TABLE_ACCESS_ENTRY_UPDATED
                 );
 
-                table_invalidate (
-                    &((*sms)->accumulation_table),
-                    proc_id,
-                    table_index
-                );
+                line_addr_access_pattern |= stored_memory_region_access_pattern;
+                *cache_line_data = line_addr_access_pattern;
                 
-                table_insert (
-                    &((*sms)->accumulation_table), 
-                    proc_id,
-                    table_index,
-                    line_addr_access_pattern,
-                    line_addr
-                );
+                // AccessPattern* cache_line_data_ =
+                //         table_check(
+                //             &((*sms)->accumulation_table),
+                //             proc_id,
+                //             table_index
+                //         );
             } 
 
             // 3b. Else nothing is inserted.
@@ -1101,6 +1100,7 @@ void accumulation_table_insert (
     // 2. Create new key-value mapping in the Accumulation 
     //  Table.
     uns flag = table_insert (
+            sms,
             &((*sms).accumulation_table),
             proc_id,
             table_index,
@@ -1108,12 +1108,12 @@ void accumulation_table_insert (
             line_addr
         );
 
-    if (flag == 0) {
+    if (flag == 1) {
         STAT_EVENT(
             proc_id, 
             ACCUMULATION_TABLE_INSERT_DIFFERENT_ENTRY_EVICTED
         );
-    } else if (flag == 1) {
+    } else if (flag == 0) {
         STAT_EVENT(
             proc_id, 
             ACCUMULATION_TABLE_INSERT_SAME_ENTRY_EVICTED
@@ -1167,32 +1167,88 @@ void pattern_history_table_insert (
         PATTERN_HISTORY_TABLE_INSERT
     );
 
-    // 1. Create new key-value mapping in the Pattern 
+    // 1. Store meta data used to index the Pattern 
     //  History Table.
-    uns flag = table_insert (
-            &((*sms).pattern_history_table), 
-            proc_id,
-            table_index,
-            memory_region_access_pattern,
-            line_addr
-        );
+    Addr temp_line_addr = line_addr;
+    Addr evicted_cache_line = 0; 
 
-    if (flag == 0) {
+    // 2. Find the next cache entry to be replaced. Most of 
+    //  this logic was taken from cache_insert in 
+    //  cache_lib.c.
+    AccessPattern* cache_line_data = 
+            (AccessPattern*) sms_cache_insert (
+                &((*sms).pattern_history_table), 
+                proc_id,
+                table_index,
+                &temp_line_addr,
+                &evicted_cache_line
+            );
+
+    *cache_line_data = memory_region_access_pattern;
+
+
+    // 3. Check if the line we just replaced has the same data.
+    //  This will be used for a graph in our final lab report.
+    //  Remember the SMS tables are set-associative, so only 
+    //  entries with the same set will be grouped together.
+    if (evicted_cache_line != 0) {
+        if (line_addr == evicted_cache_line) { 
+            STAT_EVENT(
+                proc_id, 
+                PATTERN_HISTORY_TABLE_SAME_ENTRY_EVICTED
+            );
+        }
+        else { 
+            STAT_EVENT(
+                proc_id, 
+                PATTERN_HISTORY_TABLE_DIFFERENT_ENTRY_EVICTED
+            );
+        }
+    } 
+
+    // 4. Else no line was evicted from the cache.
+    else {
         STAT_EVENT(
             proc_id, 
-            PATTERN_HISTORY_TABLE_DIFFERENT_ENTRY_EVICTED
-        );
-    } else if (flag == 1) {
-        STAT_EVENT(
-            proc_id, 
-            PATTERN_HISTORY_TABLE_SAME_ENTRY_EVICTED
-        );
-    } else {
-        STAT_EVENT(
-            proc_id, 
-            PATTERN_HISTORY_TABLE_DIFFERENT_ENTRY_EVICTED
+            PATTERN_HISTORY_TABLE_NO_ENTRY_EVICTED
         );
     }
+
+
+    // Mask tag;
+    //     // The tag part of the address, used to distinguish 
+    //     //  between different memory blocks that map to the 
+    //     //  same set.
+    // uns set = cache_index(
+    //                 &((*sms).pattern_history_table), 
+    //                 temp_line_addr, 
+    //                 &tag, 
+    //                 &temp_line_addr
+    //             );
+    // Cache_Entry *repl_cache_entry = 
+    //     find_repl_entry (
+    //         &((*sms).pattern_history_table),
+    //         proc_id,
+    //         set,
+    //         &repl_index
+    //     );
+    //     // repl_cache_entry = repl_cache_entry;
+    
+    // if (repl_cache_entry->data) {
+    //     if (repl_cache_entry->valid) {
+    //         evicted_cache_line = repl_cache_entry->base;
+    //     }
+
+    //     repl_cache_entry->proc_id = proc_id;
+    //     repl_cache_entry->valid = TRUE;
+    //     repl_cache_entry->tag = tag;
+    //     repl_cache_entry->base = line_addr;
+    //     repl_cache_entry->last_access_time = sim_time; 
+    //     repl_cache_entry->pref = FALSE;
+    //     repl_cache_entry->pw_start_addr = line_addr; 
+
+    // *(AccessPattern*) repl_cache_entry->data = memory_region_access_pattern; 
+    // }
 
     return;
 }
@@ -1329,8 +1385,8 @@ void pattern_history_table_access (
                 sms,
                 proc_id,
                 table_index,
-                line_addr,
-                set_merged_access_pattern
+                set_merged_access_pattern,
+                line_addr
             );
         }
         // Else something went wrong in storing the 
@@ -1451,7 +1507,7 @@ void sms_stream_blocks_to_data_cache (
                         table_index
                     );
 
-            if (cache_line_data) {
+            if (cache_line_data == NULL) {
                 STAT_EVENT(
                     proc_id, 
                     SMS_STREAM_BLOCKS_TO_DATA_CACHE_BLOCKS_STREAMED_TO_DCACHE

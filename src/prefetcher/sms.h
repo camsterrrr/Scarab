@@ -278,6 +278,8 @@ AccessPattern* table_check (
  * This helper function is used to insert a new entry
  *  into the table passed in as a parameter.
  * 
+ * @param sms Pointer to object maintaining reference to SMS
+ *  tables and metadata.
  * @param table Is the table to check if the entry exists 
  *  in.
  * @param proc_id ID of processor executing the instruction.
@@ -289,6 +291,7 @@ AccessPattern* table_check (
  *  address is referencing data.
  */
 int table_insert (
+    SMS* sms,
     SmsCache* table,
     uns8 proc_id,
     TableIndex table_index, 

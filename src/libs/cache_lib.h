@@ -240,4 +240,20 @@ uns   get_partition_allocated(Cache* cache, uns8 proc_id);
 /**************************************************************************************/
 
 
+
+/**************************************************************************************/
+/* SMS */
+/**************************************************************************************/
+void* sms_cache_insert(Cache* cache, uns8 proc_id, Addr addr, Addr* line_addr,
+                   Addr* repl_line_addr);
+void* sms_cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr,
+                           Addr* line_addr, Addr* repl_line_addr,
+                           Cache_Insert_Repl insert_repl_policy,
+                           Flag              isPrefetch);
+Cache_Entry* find_repl_entry(Cache*, uns8, uns, uns*);
+
+/**************************************************************************************/
+
+
+
 #endif /* #ifndef __CACHE_LIB_H__ */
