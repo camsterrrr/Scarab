@@ -30,12 +30,12 @@ SMS* sms_init (
     SMS* sms = (SMS*) malloc(sizeof(SMS));
     sms->dcache_stage = dcache_stage;
 
-    init_cache(
+    sms_init_cache (
         &(sms->accumulation_table), 
         "SMS Accumulation Table", 
-        16384, 
+        524288, 
             // This declares the number of entries .
-        4,
+        16,
             // SMS Results doesn't discuss the Pattern 
             //  History Table's recommended associativity. 
             //  We chose 4 as an arbitrary value.
@@ -51,12 +51,12 @@ SMS* sms_init (
             //  policy.
     );
 
-    init_cache(
+    sms_init_cache (
         &(sms->filter_table), 
         "SMS Filter Table", 
-        16384, 
+        524288, 
             // This declares the number of entries .
-        4,
+        16,
             // SMS Results doesn't discuss the Pattern 
             //  History Table's recommended associativity. 
             //  We chose 4 as an arbitrary value.
@@ -72,15 +72,15 @@ SMS* sms_init (
             //  policy.
     );
 
-    init_cache(
+    sms_init_cache (
         &(sms->pattern_history_table), 
         "SMS Pattern History Table", 
-        16384, 
+        524288, 
             // This declares the number of entries in
             //  the Pattern History Table. The SMS Results
             //  discuss 16K entries as limit before there
             //  is no gain in coverage.
-        4,
+        16,
             // SMS Results doesn't discuss the Pattern 
             //  History Table's recommended associativity. 
             //  We chose 4 as an arbitrary value.
@@ -1435,7 +1435,7 @@ void sms_stream_blocks_to_data_cache (
     // 2. Find the total number of regions tracked 
     //  by the access pattern.
     uns num_regions = 0;
-    for (uns i = 0; i < 64; i++) {
+    for (uns i = 0; i < (sizeof(AccessPattern) * 8); i++) {
         // 64 represents the 64 bits used in the 
         //  AccessPattern.
         if ((set_merged_access_pattern >> i) & 1) {
@@ -1457,7 +1457,7 @@ void sms_stream_blocks_to_data_cache (
     uns region_offset = 0;
 
     int arr_idx = 0;
-    for (uns i = 0; i < 64; i++) {
+    for (uns i = 0; i < (sizeof(AccessPattern) * 8); i++) {
         // 64 represents the 64 bits used in the 
         //  AccessPattern.
 

@@ -29,7 +29,7 @@ typedef Cache SmsCache;
 typedef Hash_Table SmsHashTable;
 typedef List SmsList;
 
-typedef uns64 AccessPattern;
+typedef uns AccessPattern;
 typedef uns64 Mask;
 
 /**
@@ -606,8 +606,8 @@ void sms_stream_blocks_to_data_cache (
     SMS* sms,
     uns8 proc_id,
     TableIndex table_index,
-    Addr line_addr,
-    AccessPattern set_merged_access_pattern
+    AccessPattern set_merged_access_pattern,
+    Addr line_addr
 );
 
 /**************************************************************************************/

@@ -244,6 +244,8 @@ uns   get_partition_allocated(Cache* cache, uns8 proc_id);
 /**************************************************************************************/
 /* SMS */
 /**************************************************************************************/
+void sms_init_cache(Cache* cache, const char* name, uns cache_size, uns assoc,
+                uns line_size, uns data_size, Repl_Policy repl_policy);
 void* sms_cache_insert(Cache* cache, uns8 proc_id, Addr addr, Addr* line_addr,
                    Addr* repl_line_addr);
 void* sms_cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr,

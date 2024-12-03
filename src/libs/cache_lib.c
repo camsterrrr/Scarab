@@ -77,6 +77,140 @@ char rand_repl_state[31];
 /* SMS */
 /**************************************************************************************/
 
+void sms_init_cache(Cache* cache, const char* name, uns cache_size, uns assoc,
+                uns line_size, uns data_size, Repl_Policy repl_policy) {
+
+
+
+  // Lab 2: Initialize hash table to begin tracking 
+  //  compulsory misses. 
+  cache->compulsory_miss_ht = (Hash_Table*) malloc (sizeof(Hash_Table));
+  init_hash_table (
+    cache->compulsory_miss_ht, 
+    "Hash table of compulsory misses", 
+    100000, 
+    sizeof(Addr)
+  );
+
+
+
+  uns num_lines = cache_size / (data_size * 8); // translate bits to Bytes.
+  uns num_sets  = cache_size / (data_size * 8) / assoc;
+  uns ii, jj;
+
+  DEBUG(0, "Initializing cache called '%s'.\n", name);
+
+  if (repl_policy >= REPL_VOID) {
+    init_cache_strategy(cache, name, cache_size, assoc, line_size, data_size, repl_policy);
+    return;
+  }
+
+  /* set the basic parameters */
+  strncpy(cache->name, name, MAX_STR_LENGTH);
+  cache->data_size   = data_size;
+  cache->num_lines   = num_lines;
+  cache->assoc       = assoc;
+  cache->num_sets    = num_sets;
+  cache->line_size   = line_size;
+  cache->repl_policy = repl_policy;
+
+  /* set some fields to make indexing quick */
+  cache->set_bits    = LOG2(num_sets);
+  cache->shift_bits  = LOG2(line_size);               /* use for shift amt. */
+  cache->set_mask    = N_BIT_MASK(LOG2(num_sets));    /* use after shifting */
+  cache->tag_mask    = ~cache->set_mask;              /* use after shifting */
+  cache->offset_mask = N_BIT_MASK(cache->shift_bits); /* use before shifting */
+
+  /* allocate memory for NMRU replacement counters  */
+  cache->repl_ctrs = (uns*)calloc(num_sets, sizeof(uns));
+
+  /* allocate memory for all the sets (pointers to line arrays)  */
+  cache->entries = (Cache_Entry**)malloc(sizeof(Cache_Entry*) * num_sets);
+
+  /* allocate memory for the unsure lists (if necessary) */
+  if(cache->repl_policy == REPL_IDEAL)
+    cache->unsure_lists = (List*)malloc(sizeof(List) * num_sets);
+
+  /* allocate memory for all of the lines in each set */
+  for(ii = 0; ii < num_sets; ii++) {
+    cache->entries[ii] = (Cache_Entry*)malloc(sizeof(Cache_Entry) * assoc);
+    /* allocate memory for all of the data elements in each line */
+    for(jj = 0; jj < assoc; jj++) {
+      cache->entries[ii][jj].valid = FALSE;
+      if(data_size) {
+        cache->entries[ii][jj].data = (void*)malloc(data_size);
+        memset(cache->entries[ii][jj].data, 0, data_size);
+      } else
+        cache->entries[ii][jj].data = INIT_CACHE_DATA_VALUE;
+    }
+
+    /* initialize the unsure lists (if necessary) */
+    if(cache->repl_policy == REPL_IDEAL) {
+      char list_name[MAX_STR_LENGTH + 1];
+      snprintf(list_name, MAX_STR_LENGTH, "%.*s unsure [%d]",
+               MAX_STR_LENGTH - 20, cache->name, ii);  // 21 guaruntees the
+                                                       // string will always be
+                                                       // smaller than
+                                                       // MAX_STR_LENGTH
+      init_list(&cache->unsure_lists[ii], list_name, sizeof(Cache_Entry),
+                USE_UNSURE_FREE_LISTS);
+    }
+  }
+  cache->num_demand_access = 0;
+  cache->last_update       = 0;
+
+  /* For cache partitioning */
+  if(cache->repl_policy == REPL_PARTITION) {
+    cache->num_ways_allocted_core = (uns*)malloc(sizeof(uns) * NUM_CORES);
+    cache->num_ways_occupied_core = (uns*)malloc(sizeof(uns) * NUM_CORES);
+    cache->lru_index_core         = (uns*)malloc(sizeof(uns) * NUM_CORES);
+    cache->lru_time_core = (Counter*)malloc(sizeof(Counter) * NUM_CORES);
+  }
+
+  /* allocate memory for the back-up lists (if necessary) */
+  if(cache->repl_policy == REPL_SHADOW_IDEAL) {
+    cache->shadow_entries = (Cache_Entry**)malloc(sizeof(Cache_Entry*) *
+                                                  num_sets);
+    /* allocate memory for all of the lines in each set */
+    for(ii = 0; ii < num_sets; ii++) {
+      cache->shadow_entries[ii] = (Cache_Entry*)malloc(sizeof(Cache_Entry) *
+                                                       assoc);
+      /* allocate memory for all of the data elements in each line */
+      for(jj = 0; jj < assoc; jj++) {
+        cache->shadow_entries[ii][jj].valid = FALSE;
+        if(data_size) {
+          cache->shadow_entries[ii][jj].data = (void*)malloc(data_size);
+          memset(cache->shadow_entries[ii][jj].data, 0, data_size);
+        } else
+          cache->shadow_entries[ii][jj].data = INIT_CACHE_DATA_VALUE;
+      }
+    }
+  }
+
+  else if(cache->repl_policy == REPL_IDEAL_STORAGE) {
+    cache->shadow_entries = (Cache_Entry**)malloc(sizeof(Cache_Entry*) *
+                                                  num_sets);
+    cache->queue_end      = (uns*)malloc(sizeof(uns) * num_sets);
+    /* allocate memory for all of the lines in each set */
+    for(ii = 0; ii < num_sets; ii++) {
+      cache->shadow_entries[ii] = (Cache_Entry*)malloc(sizeof(Cache_Entry) *
+                                                       ideal_num_entries);
+      /* allocate memory for all of the data elements in each line */
+      for(jj = 0; jj < ideal_num_entries; jj++) {
+        cache->shadow_entries[ii][jj].valid = FALSE;
+        if(data_size) {
+          cache->shadow_entries[ii][jj].data = (void*)malloc(data_size);
+          memset(cache->shadow_entries[ii][jj].data, 0, data_size);
+        } else
+          cache->shadow_entries[ii][jj].data = INIT_CACHE_DATA_VALUE;
+      }
+      cache->queue_end[ii] = 0;
+    }
+  }
+
+  cache->tag_incl_offset = FALSE;
+}
+
 void* sms_cache_insert(Cache* cache, uns8 proc_id, Addr addr, Addr* line_addr,
                    Addr* repl_line_addr) {
   if (cache->repl_policy >= REPL_VOID)
