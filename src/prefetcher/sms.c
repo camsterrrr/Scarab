@@ -35,7 +35,7 @@ SMS* sms_init (
         "SMS Accumulation Table", 
         524288, 
             // This declares the number of entries .
-        16,
+        4,
             // SMS Results doesn't discuss the Pattern 
             //  History Table's recommended associativity. 
             //  We chose 4 as an arbitrary value.
@@ -56,7 +56,7 @@ SMS* sms_init (
         "SMS Filter Table", 
         524288, 
             // This declares the number of entries .
-        16,
+        4,
             // SMS Results doesn't discuss the Pattern 
             //  History Table's recommended associativity. 
             //  We chose 4 as an arbitrary value.
@@ -80,7 +80,7 @@ SMS* sms_init (
             //  the Pattern History Table. The SMS Results
             //  discuss 16K entries as limit before there
             //  is no gain in coverage.
-        16,
+        4,
             // SMS Results doesn't discuss the Pattern 
             //  History Table's recommended associativity. 
             //  We chose 4 as an arbitrary value.
@@ -1383,6 +1383,7 @@ void pattern_history_table_access (
 
             sms_stream_blocks_to_data_cache (
                 sms,
+                op,
                 proc_id,
                 table_index,
                 set_merged_access_pattern,
@@ -1418,6 +1419,7 @@ void pattern_history_table_access (
 
 void sms_stream_blocks_to_data_cache (
     SMS* sms,
+    Op* op,
     uns8 proc_id,
     TableIndex table_index,
     AccessPattern set_merged_access_pattern,
@@ -1496,7 +1498,6 @@ void sms_stream_blocks_to_data_cache (
     for (uns i = 0; i < num_regions; i++) {
         SmsAddr line_addr = prediction_registers[i];
             //? Make this a pointer in the heap
-        SmsAddr repl_line_addr = 0;
 
             // 4a. Check if there is an entry in the 
             //  Dcache.
@@ -1508,34 +1509,63 @@ void sms_stream_blocks_to_data_cache (
                     );
 
             if (cache_line_data == NULL) {
-                STAT_EVENT(
-                    proc_id, 
-                    SMS_STREAM_BLOCKS_TO_DATA_CACHE_BLOCKS_STREAMED_TO_DCACHE
+
+                /* "Realistic" Insertion */
+                // 4b. Stream data to the Dcache. Note that this 
+                //  function call was coped from dcache_stage.c.
+                Flag flag = new_mem_req (
+                    MRT_DPRF, // Data prefetch memory request
+                    dc->proc_id, 
+                    line_addr, 
+                    DCACHE_LINE_SIZE,
+                    DCACHE_CYCLES - 1 + op->inst_info->extra_ld_latency, 
+                    NULL,
+                    NULL, 
+                    op->unique_num, 
+                    0
                 );
 
-                // 4b. Stream data to the Dcache.
-                Dcache_Data* dcache_line_data = 
-                        (Dcache_Data*) cache_insert(
-                                            &(*(*sms).dcache_stage).dcache, 
-                                            proc_id,
-                                            line_addr,
-                                            &line_addr, 
-                                            &repl_line_addr
-                                        );
-                (*dcache_line_data).HW_prefetch = TRUE;
+                // 4c. Check that the prefetch queue insertion
+                //  completed successfully.
+                if (flag) {
+                    STAT_EVENT(
+                        proc_id, 
+                        SMS_STREAM_BLOCKS_TO_DATA_CACHE_BLOCKS_STREAMED_TO_DCACHE
+                    );
+                }
 
-                // 4c. Check if a cache entry was 
-                //  evicted. If so, check if it is
-                //  an entry in the Active Generation
-                //  table. If it is, invalidate it
-                //  and transfer the access pattern
-                //  to the Pattern History Table.
-                sms_dcache_insert(
-                    &sms,
-                    proc_id,
-                    line_addr,
-                    repl_line_addr
-                );
+                else {
+                    STAT_EVENT(
+                        proc_id, 
+                        SMS_STREAM_BLOCKS_TO_DATA_CACHE_PREFETCH_QUEUE_INSERTION_FAILED
+                    );
+                }
+
+                /* Ideal insertion */
+                // SmsAddr repl_line_addr = 0;
+                // // 4b. Stream data to the Dcache.
+                // Dcache_Data* dcache_line_data = 
+                //         (Dcache_Data*) cache_insert(
+                //                             &(*(*sms).dcache_stage).dcache, 
+                //                             proc_id,
+                //                             line_addr,
+                //                             &line_addr, 
+                //                             &repl_line_addr
+                //                         );
+                // (*dcache_line_data).HW_prefetch = TRUE;
+
+                // // 4c. Check if a cache entry was 
+                // //  evicted. If so, check if it is
+                // //  an entry in the Active Generation
+                // //  table. If it is, invalidate it
+                // //  and transfer the access pattern
+                // //  to the Pattern History Table.
+                // sms_dcache_insert(
+                //     &sms,
+                //     proc_id,
+                //     line_addr,
+                //     repl_line_addr
+                // );
             }
 
             // Else do nothing.

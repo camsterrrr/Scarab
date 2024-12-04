@@ -15,6 +15,9 @@
 #include "libs/cache_lib.h"
 #include "libs/hash_lib.h"
 #include "libs/list_lib.h"
+#include "memory/memory.h"
+#include "memory/memory.param.h"
+
 #include "dcache_stage.h"
 #include "op.h"
 
@@ -604,6 +607,7 @@ void pattern_history_table_insert (
  */
 void sms_stream_blocks_to_data_cache (
     SMS* sms,
+    Op* op,
     uns8 proc_id,
     TableIndex table_index,
     AccessPattern set_merged_access_pattern,
