@@ -34,8 +34,9 @@ SMS* sms_init (
         &(sms->accumulation_table), 
         "SMS Accumulation Table", 
         524288, 
-            // This declares the number of entries .
-        4,
+            // This declares the size in bytes of
+            //  the table.
+        8,
             // SMS Results doesn't discuss the Pattern 
             //  History Table's recommended associativity. 
             //  We chose 4 as an arbitrary value.
@@ -55,8 +56,9 @@ SMS* sms_init (
         &(sms->filter_table), 
         "SMS Filter Table", 
         524288, 
-            // This declares the number of entries .
-        4,
+            // This declares the size in bytes of
+            //  the table.
+        8,
             // SMS Results doesn't discuss the Pattern 
             //  History Table's recommended associativity. 
             //  We chose 4 as an arbitrary value.
@@ -76,11 +78,11 @@ SMS* sms_init (
         &(sms->pattern_history_table), 
         "SMS Pattern History Table", 
         524288, 
-            // This declares the number of entries in
+            // This declares the size in bytes of
             //  the Pattern History Table. The SMS Results
             //  discuss 16K entries as limit before there
             //  is no gain in coverage.
-        4,
+        8,
             // SMS Results doesn't discuss the Pattern 
             //  History Table's recommended associativity. 
             //  We chose 4 as an arbitrary value.
@@ -1520,7 +1522,7 @@ void sms_stream_blocks_to_data_cache (
                     DCACHE_LINE_SIZE,
                     DCACHE_CYCLES - 1 + op->inst_info->extra_ld_latency, 
                     NULL,
-                    NULL, 
+                    dcache_fill_line, 
                     op->unique_num, 
                     0
                 );
